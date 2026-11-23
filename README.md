@@ -41,3 +41,9 @@ Change `COACH_MODEL` in the server's environment and restart to try a different 
 ```
 
 Tests use a fake Ollama endpoint. They validate the service contract and error handling, not Qwen's editing knowledge.
+
+## Local desktop build and training
+
+- Existing frontend clients still work. Optional `editor` and `version` fields let a new client include the user's selected editor without changing the response.
+- The default development runner above is Ollama. The offline release path uses [llama.cpp](https://github.com/ggml-org/llama.cpp) with the same API and a pinned GGUF, without an Ollama account. Review [Ollama's eligibility terms](https://ollama.com/terms) before using its services.
+- See [training/README.md](training/README.md) to start a free-GPU smoke run, export and compare weights, and launch the actual desktop frontend. This branch provides a launcher, not an installer; the desktop frontend and checkpoint are separate inputs.
