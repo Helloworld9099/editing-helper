@@ -35,6 +35,7 @@ test('pet remains 80px and the open chat follows during drag without resizing', 
     setAlwaysOnTop() {}
     setVisibleOnAllWorkspaces() {}
     show() { this.visible = true; }
+    hide() { this.visible = false; }
     getBounds() { return { ...this.bounds }; }
     getPosition() { return [this.bounds.x, this.bounds.y]; }
     getSize() { return [this.bounds.width, this.bounds.height]; }
