@@ -7,6 +7,9 @@
   const editor = $('editor'), version = $('version'), url = $('url');
   const onTop = $('onTop'), normalMode = $('normalMode');
   const errorEl = $('error'), infoEl = $('info'), saveBtn = $('save');
+  // Closing Settings must work even if configuration retrieval fails.
+  $('cancel').addEventListener('click', () => window.close());
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && mode === 'settings') window.close(); });
 
   if (mode === 'setup') {
     $('title').textContent = 'Welcome to Editing Coach';
@@ -88,6 +91,4 @@
     window.close();
   });
 
-  $('cancel').addEventListener('click', () => window.close());
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && mode === 'settings') window.close(); });
 })();

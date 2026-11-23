@@ -136,7 +136,8 @@
   document.getElementById('settings').addEventListener('click', () => api.openSettings());
 
   async function showEditor() {
-    const cfg = await api.getConfig();
+    let cfg;
+    try { cfg = await api.getConfig(); } catch { /* show the generic guidance */ }
     const app = cfg && cfg.editor ? cfg.editor + (cfg.editorVersion ? ' ' + cfg.editorVersion : '') : '';
     const prior = log.querySelector('.note');
     const note = app ? `Ask about ${app}. Answers aren't checked against sources yet.` : 'Choose your editor in Settings.';
