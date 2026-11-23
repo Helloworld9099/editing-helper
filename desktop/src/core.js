@@ -14,7 +14,7 @@ const MAX_QUESTION_CHARS = 1000; // matches /v1/coach
 const SUPPORTED_APPS = Object.freeze(['DaVinci Resolve']);
 const UPCOMING_APPS = Object.freeze(['Kdenlive', 'Adobe Premiere Pro', 'Final Cut Pro', 'CapCut', 'Shotcut', 'OpenShot']);
 
-const MASCOT_SIZES = Object.freeze([96, 120, 144]);
+const MASCOT_SIZES = Object.freeze([80, 96, 120, 144]);
 
 function nextMascotSize(size) {
   return MASCOT_SIZES[(MASCOT_SIZES.indexOf(size) + 1) % MASCOT_SIZES.length];

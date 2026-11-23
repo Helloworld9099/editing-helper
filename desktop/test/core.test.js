@@ -203,8 +203,8 @@ test('client sends the selected editor and optional version; rejects unsupported
 
 test('mascot zoom cycles through fixed levels and persists separately from drag position', () => {
   let size = core.DEFAULTS.mascotSize;
-  assert.equal(size, 96);
-  for (const next of [120, 144, 96]) {
+  assert.equal(size, 80);
+  for (const next of [96, 120, 144, 80]) {
     size = core.nextMascotSize(size);
     assert.equal(size, next);
   }
@@ -212,5 +212,5 @@ test('mascot zoom cycles through fixed levels and persists separately from drag 
   core.saveConfig({ ...core.DEFAULTS, mascotSize: 144, mascotX: 22, mascotY: 23 }, f);
   assert.equal(core.loadConfig(f).mascotSize, 144);
   fs.writeFileSync(f, JSON.stringify({ mascotSize: 9999 }));
-  assert.equal(core.loadConfig(f).mascotSize, 96);
+  assert.equal(core.loadConfig(f).mascotSize, 80);
 });

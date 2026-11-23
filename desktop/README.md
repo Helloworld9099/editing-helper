@@ -28,7 +28,7 @@ npm start
 3. Ask **How do I make a camera shake?** The mock should echo the question and
    show **Editor: DaVinci Resolve**. It does not generate real instructions.
 4. Drag the pet to move it without scaling. Click its bottom-right resize button
-   to cycle through 100%, 125%, and 150%.
+   to cycle through 80 (default), 96, 120, and 144 px.
 5. Try `/long` for scrolling, `/slow` for a delayed reply, and `/err` for retry.
    Stop the mock server with Ctrl+C when finished.
 
