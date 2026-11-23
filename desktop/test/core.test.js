@@ -119,6 +119,10 @@ test('validateBaseUrl', () => {
 });
 
 test('urlWarning only for plain http to non-loopback', () => {
+  assert.equal(core.isLoopback('127.attacker.example'), false);
+  assert.equal(core.isLoopback('127.0.0.1'), true);
+  assert.equal(core.isLoopback('[::1]'), true);
+  assert.match(core.urlWarning('http://127.attacker.example:8000'), /unencrypted/);
   assert.equal(core.urlWarning('http://127.0.0.1:8000'), '');
   assert.equal(core.urlWarning('http://localhost:8000'), '');
   assert.equal(core.urlWarning('https://coach.example.com'), '');
@@ -172,6 +176,17 @@ test('panelPosition: opens toward the roomy side and stays on screen', () => {
   assert.ok(left.x > 116);
   const corner = core.panelPosition({ x: 1800, y: 1000, width: 96, height: 96 }, panel, area);
   assert.ok(corner.x >= 0 && corner.x + 380 <= 1920 && corner.y >= 0 && corner.y + 520 <= 1080);
+});
+
+test('panel follows on preferred side without flipping at midpoint', () => {
+  const m = { x: 1070, y: 510, width: 80, height: 80 };
+  const pane = { width: 380, height: 520 };
+  const p = core.panelPosition(m, pane, area, 8, 8, 'right');
+  assert.equal(p.side, 'right');
+  assert.equal(p.x, 1158);
+  const atEdge = core.panelPosition({ ...m, x: 1700 }, pane, area, 8, 8, 'right');
+  assert.equal(atEdge.side, 'left');
+  assert.ok(atEdge.x >= 8);
 });
 
 test('sanitizeText strips control characters but keeps newlines', () => {

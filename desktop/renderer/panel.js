@@ -5,8 +5,20 @@
   const input = document.getElementById('input');
   const sendBtn = document.getElementById('send');
   const status = document.getElementById('status');
+  const examples = document.getElementById('examples');
+  const counter = document.getElementById('count');
+  const clearBtn = document.getElementById('clear');
   const MAX_CHARS = 1000;
   let busy = false;
+  let messageCount = 0;
+
+  function syncControls() {
+    const length = input.value.length;
+    counter.textContent = length + ' / ' + MAX_CHARS;
+    counter.classList.toggle('near-limit', length >= MAX_CHARS);
+    sendBtn.disabled = busy || !input.value.trim() || length > MAX_CHARS;
+    clearBtn.disabled = busy || messageCount === 0;
+  }
 
   // Everything is added with textContent: replies are shown as plain text, never as markup or script.
   function addMessage(kind, who, text) {
@@ -24,15 +36,20 @@
     el.appendChild(body);
     if (kind === 'error') el.setAttribute('role', 'alert');
     log.appendChild(el);
+    if (kind !== 'note') {
+      messageCount++;
+      examples.hidden = true;
+      syncControls();
+    }
     if (kind === 'coach') el.scrollIntoView({ block: 'start' });   // long answers open at the top
     else log.scrollTop = log.scrollHeight;
   }
 
   function setBusy(b) {
     busy = b;
-    sendBtn.disabled = b;
     status.textContent = b ? 'Thinking' : '';
     status.classList.toggle('busy', b);
+    syncControls();
   }
 
   async function submit() {
@@ -45,6 +62,7 @@
     }
     setBusy(true);
     input.value = '';
+    syncControls();
     addMessage('user', 'You', q);
     let result;
     try {
@@ -59,6 +77,7 @@
       addMessage('error', null, (result && result.message) || 'Something went wrong. Try again.');
       if (!input.value.trim()) input.value = q;   // let the user retry without retyping
     }
+    syncControls();
     // Deliberately no input.focus() here: a reply must never pull focus back from your editor.
   }
 
@@ -91,6 +110,24 @@
   });
 
   sendBtn.addEventListener('click', submit);
+  input.addEventListener('input', syncControls);
+  examples.querySelectorAll('[data-prompt]').forEach((button) => {
+    button.addEventListener('click', () => {
+      input.value = button.dataset.prompt;
+      syncControls();
+      input.focus();
+    });
+  });
+  clearBtn.addEventListener('click', () => {
+    if (busy || messageCount === 0) return;
+    log.replaceChildren();
+    messageCount = 0;
+    examples.hidden = false;
+    input.value = '';
+    syncControls();
+    void showEditor();
+    input.focus();
+  });
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); submit(); }
   });
@@ -99,7 +136,8 @@
   document.getElementById('settings').addEventListener('click', () => api.openSettings());
 
   async function showEditor() {
-    const cfg = await api.getConfig();
+    let cfg;
+    try { cfg = await api.getConfig(); } catch { /* show the generic guidance */ }
     const app = cfg && cfg.editor ? cfg.editor + (cfg.editorVersion ? ' ' + cfg.editorVersion : '') : '';
     const prior = log.querySelector('.note');
     const note = app ? `Ask about ${app}. Answers aren't checked against sources yet.` : 'Choose your editor in Settings.';
@@ -107,5 +145,6 @@
     else addMessage('note', null, note);
   }
   api.on('panel:shown', () => { input.focus(); void showEditor(); });
+  syncControls();
   void showEditor();
 })();

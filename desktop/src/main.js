@@ -23,6 +23,7 @@ let mascot = null, panel = null, settingsWin = null;
 let busy = false;
 let quitting = false;
 let drag = null, panelDrag = null;
+let panelSide = null;
 let hideTimer = null, moveTimer = null;
 
 const alive = (w) => w && !w.isDestroyed();
@@ -119,18 +120,23 @@ function createPanel() {
     backgroundColor: '#f7f9fb',
     webPreferences: prefs(),
   });
+  panel.webContents.on?.('did-finish-load', () => {
+    // On the first open, the renderer may load after the window becomes visible.
+    if (panelVisible()) panel.webContents.send('panel:shown');
+  });
   panel.loadFile(path.join(RENDERER, 'panel.html'));
   panel.on('close', (e) => {            // Alt+F4 / window close = collapse, not quit
     if (!quitting) { e.preventDefault(); closePanel(); }
   });
 }
 
-function placePanel() {
+function placePanel(followingDrag = false) {
   if (!alive(panel) || !alive(mascot)) return;
   const m = mascot.getBounds();
   const [width, height] = panel.getSize();
   const area = screen.getDisplayMatching(m).workArea;
-  const { x, y } = core.panelPosition(m, { width, height }, area);
+  const { x, y, side } = core.panelPosition(m, { width, height }, area, 8, 8, followingDrag ? panelSide : null);
+  panelSide = side;
   panel.setPosition(x, y);
 }
 
@@ -141,7 +147,7 @@ function openPanel() {
   panel.show();                          // user-initiated, so taking focus here is expected
   panel.focus();
   if (cfg.keepOnTop) panel.setAlwaysOnTop(true, 'floating');
-  panel.webContents.send('panel:shown');
+  if (!panel.webContents.isLoadingMainFrame?.()) panel.webContents.send('panel:shown');
   mascot.webContents.send('mascot:badge', false);
 }
 
@@ -209,18 +215,20 @@ function registerIpc() {
     const windowMode = input.windowMode === 'normal' ? 'normal' : input.windowMode === 'floating' ? 'floating' : cfg.windowMode;
     const wasSetup = !cfg.setupDone;
     const restartNeeded = !wasSetup && windowMode !== cfg.windowMode;
-    Object.assign(cfg, {
+    const next = {
+      ...cfg,
       editor: input.editor,
       editorVersion: core.sanitizeText(String(input.editorVersion ?? '')).trim().slice(0, 40),
       apiBaseUrl: url,
       keepOnTop: typeof input.keepOnTop === 'boolean' ? input.keepOnTop : cfg.keepOnTop,
       windowMode,
-    });
-    if (wasSetup && input.finishSetup === true) {
-      cfg.setupDone = true;
-      normal = forceNormal || cfg.windowMode === 'normal';
-    }
-    persist();
+      setupDone: cfg.setupDone || (wasSetup && input.finishSetup === true),
+    };
+    // Do not report success or update live settings until the new config is persisted.
+    try { core.saveConfig(next, cfgFile); }
+    catch { return { ok: false, errors: { form: 'Could not save settings. Check file permissions and try again.' } }; }
+    cfg = next;
+    if (wasSetup && cfg.setupDone) normal = forceNormal || cfg.windowMode === 'normal';
     for (const w of [mascot, panel]) if (alive(w)) w.setAlwaysOnTop(cfg.keepOnTop, 'floating');
     if (wasSetup && cfg.setupDone) { createMascot(); createPanel(); }   // before setup window closes
     return { ok: true, restartNeeded };
@@ -278,11 +286,12 @@ function registerIpc() {
   });
   ipcMain.on('mascot:drag-move', (e) => {
     if (!isFrom(e, mascot) || !drag) return;
-    const [width, height] = mascot.getSize();
     const c = screen.getCursorScreenPoint();
-    const p = clampMascot(drag.wx + (c.x - drag.cx), drag.wy + (c.y - drag.cy), width, height);
-    // Move only the pet. The chat is placed next to it when opened, never during a drag.
-    mascot.setPosition(p.x, p.y);
+    const p = clampMascot(drag.wx + (c.x - drag.cx), drag.wy + (c.y - drag.cy), MASCOT_SIZE, MASCOT_SIZE);
+    // Set position and size together: compositor/window-manager changes cannot grow the pet.
+    mascot.setBounds({ x: p.x, y: p.y, width: MASCOT_SIZE, height: MASCOT_SIZE });
+    // Follow the pet while the chat is open, without changing the chat's dimensions.
+    if (panelVisible()) placePanel(true);
   });
   ipcMain.on('mascot:drag-end', (e, moved) => {
     if (!isFrom(e, mascot)) return;

@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const http = require('node:http');
 const https = require('node:https');
+const { isIP } = require('node:net');
 
 const DEFAULT_API_URL = 'http://127.0.0.1:8000';
 const COACH_PATH = '/v1/coach';
@@ -45,7 +46,8 @@ const DEFAULTS = Object.freeze({
 // ------------------------------------------------------------------ URLs
 function isLoopback(host) {
   const h = String(host || '').toLowerCase().replace(/^\[|\]$/g, '');
-  return h === 'localhost' || h === '::1' || h.startsWith('127.');
+  // DNS names such as 127.attacker.example are not loopback IPv4 addresses.
+  return h === 'localhost' || h === '::1' || (isIP(h) === 4 && h.split('.')[0] === '127');
 }
 
 function validateBaseUrl(raw) {
@@ -132,13 +134,20 @@ function defaultMascotPosition(size, area, margin = 16) {
   return clampToArea(area.x + area.width - size - margin, area.y + Math.round(area.height / 2 - size / 2), size, size, area, 8);
 }
 
-// Put the panel beside the mascot, on whichever side has more room.
-function panelPosition(m, panel, area, gap = 8, margin = 8) {
-  const mascotCenter = m.x + m.width / 2;
-  const areaCenter = area.x + area.width / 2;
-  const x = mascotCenter > areaCenter ? m.x - gap - panel.width : m.x + m.width + gap;
+// Keep the panel on the same side during a drag until it would run off screen.
+// This avoids an unnecessary side-switch as the pet crosses the screen's midpoint.
+function panelPosition(m, panel, area, gap = 8, margin = 8, preferredSide = null) {
+  const leftX = m.x - gap - panel.width;
+  const rightX = m.x + m.width + gap;
+  const leftFits = leftX >= area.x + margin;
+  const rightFits = rightX + panel.width <= area.x + area.width - margin;
+  const defaultSide = m.x + m.width / 2 > area.x + area.width / 2 ? 'left' : 'right';
+  let side = preferredSide === 'left' || preferredSide === 'right' ? preferredSide : defaultSide;
+  if (side === 'left' && !leftFits && rightFits) side = 'right';
+  if (side === 'right' && !rightFits && leftFits) side = 'left';
+  const x = side === 'left' ? leftX : rightX;
   const y = m.y + Math.round(m.height / 2 - panel.height / 2);
-  return clampToArea(x, y, panel.width, panel.height, area, margin);
+  return { ...clampToArea(x, y, panel.width, panel.height, area, margin), side };
 }
 
 // ------------------------------------------------------------ API client
