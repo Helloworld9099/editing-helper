@@ -156,4 +156,13 @@ test('pet remains 80px and the open chat follows during drag without resizing', 
   assert.deepEqual(chat.getSize(), [380, 520]);
   assert.deepEqual(pet.getSize(), petSize);
   assert.equal(chat.focusCalls, focusBeforeDrag, 'drag must not re-focus the chat');
+  // With chat collapsed, the pet is free to travel down to the screen edge.
+  emit(pet, 'mascot:click'); // collapse
+  emit(pet, 'mascot:drag-start');
+  point = { x: 1750, y: 1800 };
+  emit(pet, 'mascot:drag-move');
+  emit(pet, 'mascot:drag-end', true);
+  assert.equal(chat.isVisible(), false);
+  assert.equal(pet.getPosition()[1], 1200 - 8 - 80);
+  assert.deepEqual(pet.getSize(), petSize);
 });
