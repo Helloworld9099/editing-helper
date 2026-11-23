@@ -56,6 +56,15 @@ with sync_playwright() as pw:
     # ---------------- panel ----------------
     p, errs = open_page("panel.html")
     check("panel: loads with no console/CSP errors", not errs, errs)
+    check("panel: studio header is present", p.locator(".brand-symbol .slate").count() == 1 and "Your creative sidekick" in p.inner_text(".brand"))
+    check("panel: no horizontal overflow", p.evaluate("document.documentElement.scrollWidth <= innerWidth"))
+    compact, _ = open_page("panel.html", size=(320, 400))
+    check("panel: compact remains fully usable",
+          compact.evaluate("(() => { const s=document.querySelector('#send').getBoundingClientRect(); const v=document.documentElement; return v.scrollWidth <= innerWidth && s.right <= innerWidth && s.bottom <= innerHeight && document.querySelector('#input').getBoundingClientRect().bottom < innerHeight; })()"))
+    compact.screenshot(path=str(OUT / "panel_compact.png"))
+    minimum, _ = open_page("panel.html", size=(300, 300))
+    check("panel: minimum window keeps Send visible",
+          minimum.evaluate("(() => {const s=document.querySelector('#send').getBoundingClientRect(); return document.documentElement.scrollWidth <= innerWidth && s.bottom <= innerHeight;})()"))
     check("panel: welcome note mentions app and says not verified",
           "DaVinci Resolve 20.1" in p.inner_text("#log") and "aren't checked against sources" in p.inner_text("#log"))
     pb, _ = open_page("panel.html", cfg={"editor": "", "editorVersion": ""})
@@ -143,6 +152,13 @@ with sync_playwright() as pw:
     check("mascot: keyboard Enter opens panel (accessibility)", names(p) == ["click"])
     check("mascot: hovering does not scale the artwork", p.locator("#pet svg").evaluate("(svg) => getComputedStyle(svg).transform") == "none")
     check("mascot: no resize grip", p.locator("#zoom, #resize").count() == 0)
+    check("mascot: fixed 80px artwork even after hover",
+          p.locator("#pet svg").evaluate("(svg) => svg.getBoundingClientRect().width === 80 && svg.getBoundingClientRect().height === 80"))
+    p.emulate_media(reduced_motion="reduce")
+    p.evaluate("window.__emit('mascot:busy', true)")
+    check("mascot: reduce-motion disables thinking animation",
+          p.locator("#pet .eyes").evaluate("(eyes) => getComputedStyle(eyes).animationName === 'none'"))
+    p.evaluate("window.__emit('mascot:busy', false)")
     p.screenshot(path=str(OUT / "mascot.png"), omit_background=True)
 
     p, _ = open_page("mascot.html", cfg={"normal": True, "windowMode": "normal"}, size=(96, 96))
@@ -154,6 +170,8 @@ with sync_playwright() as pw:
     # ---------------- setup / settings ----------------
     p, errs = open_page("settings.html", cfg={"setupDone": False, "editor": "", "editorVersion": ""}, query="?mode=setup", size=(460, 380))
     check("setup: loads with no errors", not errs, errs)
+    check("setup: primary Start action fits inside native window",
+          p.evaluate("(() => {const s=document.querySelector('#save').getBoundingClientRect();return s.bottom <= innerHeight && document.documentElement.scrollWidth <= innerWidth;})()"))
     check("setup: no editor preselected", p.input_value("#editor") == "")
     check("setup: editor/version visible, no server or edition field", p.is_visible("#editor") and p.is_visible("#version") and not p.is_visible("#url") and "Studio" not in p.inner_text("body"))
     check("setup: upcoming editor disabled", p.locator("#editor option[value=Kdenlive]").is_disabled())

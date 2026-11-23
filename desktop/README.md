@@ -35,6 +35,17 @@ npm start
 5. Try `/long` for scrolling, `/slow` for a delayed reply, and `/err` for retry.
    Stop the mock server with Ctrl+C when finished.
 
+## Visual and motion behavior
+
+The studio-style UI uses layered surfaces and a small set of teal tones. The
+mascot now has highlights and a brief hover expression, but **no continuous idle
+movement**. The pet and chat window dimensions remain fixed while dragging;
+only the chat resize grip or the explicit size presets change chat dimensions.
+The model's thinking indicator is the only repeating status animation, and it
+stops when the request finishes. The OS `prefers-reduced-motion` setting
+disables nonessential animations. No sounds, automatic messages, or focus changes
+are introduced by the redesign.
+
 Try `npm run start:normal` if the floating overlay doesn't behave on your
 desktop. On Linux the floating mode defaults to X11/XWayland. The normal
 mode uses regular framed windows. Windows and macOS are not verified.

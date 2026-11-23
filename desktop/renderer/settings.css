@@ -1,16 +1,30 @@
-body { background: var(--surface); overflow-y: auto; }
-form { padding: 22px 24px; }
-h1 { margin: 0 0 6px; font-size: 20px; }
-.intro { margin: 0 0 14px; }
-label { display: block; font-weight: 600; margin: 14px 0 4px; }
-label.check { font-weight: 400; display: flex; gap: 8px; align-items: flex-start; margin: 12px 0 0; }
-label.check input { margin-top: 4px; }
+body { background: #f8faf7; overflow-y: auto; }
+form { padding: 22px 24px 24px; max-width: 560px; margin: auto; }
+h1 { margin: 0 0 7px; font-size: 23px; font-weight: 760; letter-spacing: -.035em; color: #1c4b45; }
+h1::before { content: ""; display: inline-block; width: 7px; height: 18px; border-radius: 4px; margin-right: 9px; background: #2a9686; vertical-align: -2px; }
+.intro { margin: 0 0 16px; max-width: 390px; line-height: 1.55; color: #526e67; }
+label { display: block; font-weight: 680; font-size: 13px; margin: 15px 0 5px; }
+label.check { font-weight: 500; display: flex; gap: 10px; align-items: flex-start; margin: 13px 0 0; line-height: 1.45; }
+label.check input { margin: 3px 0 0; accent-color: var(--accent); flex: 0 0 auto; }
 select, input[type="text"] {
-  width: 100%; font: inherit; padding: 8px; color: var(--text); background: var(--surface);
-  border: 1px solid var(--border); border-radius: 6px;
+  width: 100%; min-height: 39px; font: inherit; font-size: 13px; padding: 9px 11px;
+  color: var(--text); background: var(--surface); border: 1px solid #c7dad2;
+  border-radius: 10px; box-shadow: 0 1px 3px rgba(18,57,52,.035);
 }
-p { margin: 6px 0 0; }
-.error { color: var(--error); min-height: 20px; margin-top: 12px; font-size: 14px; }
+select:focus-visible, input:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+p { margin: 5px 0 0; }
+.muted { line-height: 1.5; }
+.error { color: var(--error); min-height: 20px; margin-top: 13px; font-size: 13px; }
 .warn:empty, .error:empty { display: none; }
-.buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+.buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
 body[data-mode="setup"] .settings-only { display: none; }
+
+/* Setup uses a shorter native Electron window than the full Settings screen. */
+body[data-mode="setup"] form { padding: 16px 22px 18px; }
+body[data-mode="setup"] h1 { font-size: 21px; margin-bottom: 5px; }
+body[data-mode="setup"] .intro { margin: 0 0 10px; font-size: 13px; line-height: 1.45; }
+body[data-mode="setup"] label { margin: 10px 0 3px; }
+body[data-mode="setup"] select, body[data-mode="setup"] input[type="text"] { min-height: 35px; padding: 7px 10px; }
+body[data-mode="setup"] p { margin-top: 3px; }
+body[data-mode="setup"] .error { min-height: 0; margin-top: 8px; }
+body[data-mode="setup"] .buttons { margin-top: 10px; }

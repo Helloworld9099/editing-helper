@@ -31,6 +31,16 @@
       w.textContent = who;
       el.appendChild(w);
     }
+    if (kind === 'note') {
+      const mark = document.createElement('span');
+      mark.className = 'note-mark';
+      mark.setAttribute('aria-hidden', 'true');
+      mark.textContent = '✦';
+      const title = document.createElement('h2');
+      title.textContent = 'Good edits start here.';
+      el.appendChild(mark);
+      el.appendChild(title);
+    }
     const body = document.createElement('div');
     body.className = 'body';
     body.textContent = text;

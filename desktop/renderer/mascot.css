@@ -1,14 +1,33 @@
-html, body { background: transparent; overflow: hidden; margin: 0; width: 100%; height: 100%; user-select: none; -webkit-user-select: none; }
+html, body {
+  background: transparent; overflow: hidden; margin: 0;
+  width: 100%; height: 100%;
+  user-select: none; -webkit-user-select: none;
+}
 body { position: relative; }
-/* The transparent floating window has a fixed 80px content size. Never scale the
-   artwork in response to a compositor/window resize while dragging. */
-#pet { width: 80px; height: 80px; max-width: 80px; max-height: 80px; cursor: grab; touch-action: none; border-radius: 50%; }
+/* Geometry is owned solely by Electron. Styling never scales the pet window. */
+#pet {
+  width: 80px; height: 80px; max-width: 80px; max-height: 80px;
+  cursor: grab; touch-action: none; border-radius: 50%;
+}
 #pet.dragging { cursor: grabbing; }
-#pet svg { display: block; width: 80px; height: 80px; pointer-events: none; }
+#pet svg { display: block; width: 80px; height: 80px; pointer-events: none; transform: none; }
+#pet .hat, #pet .eyes, #pet .cheeks, #pet .smile {
+  transform-box: fill-box; transform-origin: center;
+  transition: transform .2s cubic-bezier(.2,.7,.3,1), opacity .2s ease;
+}
+#pet:hover:not(.dragging) .hat { transform: rotate(-2deg) translateY(-.6px); }
+#pet:hover:not(.dragging) .cheeks { opacity: .75; }
+#pet:hover:not(.dragging) .smile { transform: translateY(1px); }
+#pet:not(.busy):hover:not(.dragging) .eyes { transform: translateY(-1px); }
+.blink-lines { opacity: 0; }
+#pet:hover:not(.dragging) .blink-lines { animation: blink .25s ease-out 1; }
+@keyframes blink { 0%, 100% { opacity: 0; } 38%, 62% { opacity: .98; } }
 .badge { display: none; }
 #pet.badge-on .badge { display: block; }
-#pet.busy .eyes { animation: glance .9s ease-in-out infinite alternate; }
-@keyframes glance { from { transform: translateX(-2.5px); } to { transform: translateX(2.5px); } }
+#pet.busy .eyes { animation: glance 2.2s ease-in-out infinite alternate; }
+@keyframes glance { 0%, 100% { transform: translateX(-1px); } 50% { transform: translateX(1px); } }
 @media (prefers-reduced-motion: reduce) {
-  #pet.busy .eyes { animation: none; }
+  #pet .hat, #pet .eyes, #pet .cheeks, #pet .smile { transition: none; }
+  #pet:hover:not(.dragging) .blink-lines, #pet.busy .eyes { animation: none; }
+  #pet:hover:not(.dragging) .hat, #pet:hover:not(.dragging) .eyes, #pet:hover:not(.dragging) .smile { transform: none; }
 }

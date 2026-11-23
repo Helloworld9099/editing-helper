@@ -9,27 +9,36 @@
 </head>
 <body>
   <div class="panel">
-    <header>
-      <h1>Editing Coach</h1>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-symbol" aria-hidden="true"><span class="slate"></span></span>
+        <div class="brand-copy">
+          <h1>Editing Coach</h1>
+          <span class="brand-subtitle">Your creative sidekick</span>
+        </div>
+      </div>
       <div class="actions">
         <button id="settings" class="ghost" type="button">Settings</button>
-        <button id="collapse" class="ghost" type="button" aria-label="Collapse panel (Escape)">Collapse</button>
+        <button id="collapse" class="ghost collapse" type="button" title="Collapse chat (Esc)" aria-label="Collapse panel (Escape)"><span aria-hidden="true">−</span></button>
       </div>
     </header>
     <main id="log" class="empty" role="log" aria-live="polite" aria-label="Conversation" tabindex="0"></main>
     <div id="examples" class="examples" aria-label="Suggested questions">
-      <button type="button" class="example" data-prompt="How do I make a camera shake?">Camera shake</button>
-      <button type="button" class="example" data-prompt="How do I stabilize shaky footage?">Stabilize footage</button>
-    </div>
-    <div class="utility">
-      <span id="count" class="muted" aria-label="Question length">0 / 1000</span>
-      <button id="clear" class="clear" type="button" disabled>Clear chat</button>
+      <button type="button" class="example" data-prompt="How do I make a camera shake?">Camera shake <span aria-hidden="true">↗</span></button>
+      <button type="button" class="example" data-prompt="How do I stabilize shaky footage?">Stabilize footage <span aria-hidden="true">↗</span></button>
     </div>
     <div id="status" class="status" role="status"></div>
     <footer>
-      <textarea id="input" rows="3" maxlength="1000" placeholder="Ask an editing question…" aria-label="Your question"></textarea>
-      <button id="send" class="primary" type="button" disabled>Send</button>
-      <p class="hint muted">Enter sends · Shift+Enter new line · Esc collapses</p>
+      <div class="composer-meta">
+        <label for="input">YOUR QUESTION</label>
+        <span id="count" class="muted" aria-label="Question length">0 / 1000</span>
+        <button id="clear" class="clear" type="button" disabled>Clear chat</button>
+      </div>
+      <div class="composer">
+        <textarea id="input" rows="2" maxlength="1000" placeholder="How can I make this shot better?" aria-label="Your question"></textarea>
+        <button id="send" class="primary" type="button" disabled>Send <span aria-hidden="true">↗</span></button>
+      </div>
+      <p class="hint muted">Enter to send · Shift+Enter for a new line · Esc to close</p>
       <button id="resize" type="button" title="Drag to resize chat" aria-label="Resize chat window. Drag or use the arrow keys.">
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">
           <path d="M3 13 13 3M8 13l5-5M12 13l1-1"/>
