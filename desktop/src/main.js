@@ -103,7 +103,7 @@ function hideForNow() {
 }
 
 // Offer explicit sizes so the chat can stay compact without imprecise dragging.
-// A preset is the only action here allowed to change the saved chat dimensions.
+// A preset, like the resize grip, changes saved dimensions only by a user action.
 function setChatSize(width, height) {
   const next = { ...cfg, panelWidth: width, panelHeight: height };
   try { core.saveConfig(next, cfgFile); }
