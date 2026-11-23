@@ -18,7 +18,10 @@ test('pet remains 80px and the open chat follows during drag without resizing', 
       super();
       this.opts = o;
       this.bounds = { x: o.x ?? 0, y: o.y ?? 0, width: o.width, height: o.height };
-      this.webContents = { send() {} };
+      this.webContents = {
+        sent: [],
+        send(name, payload) { this.sent.push([name, payload]); },
+      };
       this.visible = false;
       this.focusCalls = 0;
       this.positionCalls = 0;
@@ -91,9 +94,11 @@ test('pet remains 80px and the open chat follows during drag without resizing', 
   assert.equal(chat.positionCalls, 0, 'following the pet must never call setPosition on the chat');
   assert.equal(chat.focusCalls, focusOnOpen, 'dragging must never focus the chat');
   // The panel tracks the pet, staying on its original side until it would hit an edge.
-  const expected = core.panelPosition(pet.getBounds(), { width: originalChat.width, height: originalChat.height }, display.workArea, 8, 8, 'right');
+  const expected = core.panelPosition(pet.getBounds(), { width: originalChat.width, height: originalChat.height }, display.workArea, -12, 8, 'right');
   assert.deepEqual(chat.getPosition(), [expected.x, expected.y]);
   assert.notDeepEqual(chat.getPosition(), [originalChat.x, originalChat.y]);
+  assert.equal(chat.getBounds().y, pet.getBounds().y + 8, 'chat begins below the pet top');
+  assert.ok(chat.webContents.sent.some(([name, side]) => name === 'panel:side' && side === 'right'));
   // Simulate a compositor resizing the panel between pointer events. The next
   // movement must restore the saved size rather than compounding the growth.
   chat.bounds.width = 900;
@@ -114,6 +119,9 @@ test('pet remains 80px and the open chat follows during drag without resizing', 
   const b = chat.getBounds();
   assert.ok(b.x >= 8 && b.x + b.width <= 1920 - 8);
   assert.ok(b.y >= 8 && b.y + b.height <= 1200 - 8);
+  assert.equal(b.y, pet.getBounds().y + 8);
+  assert.ok(chat.webContents.sent.some(([name, side]) => name === 'panel:side' && side === 'left'),
+    'tail must flip toward the mascot near the right edge');
   emit(chat, 'panel:resize', 'start');
   emit(chat, 'panel:resize', 'move', 50, 40);
   emit(chat, 'panel:resize', 'end');
@@ -131,4 +139,21 @@ test('pet remains 80px and the open chat follows during drag without resizing', 
   assert.deepEqual(chat.getSize(), [380, 520]);
   assert.deepEqual(pet.getSize(), petSize);
   assert.equal(chat.focusCalls, focusOnOpen, 'size presets must not steal focus');
+  // Opening from near the screen bottom moves the pet up just enough to fit
+  // the bubble below its top, rather than leaving the bubble above the pet.
+  emit(pet, 'mascot:click'); // collapse
+  pet.setBounds({ ...pet.getBounds(), y: 1080 });
+  emit(pet, 'mascot:click'); // open
+  assert.equal(pet.getPosition()[1], 1200 - 8 - 520 - 8);
+  assert.equal(chat.getBounds().y, pet.getBounds().y + 8);
+  assert.equal(chat.getBounds().y + chat.getBounds().height, 1200 - 8);
+  const focusBeforeDrag = chat.focusCalls;
+  emit(pet, 'mascot:drag-start');
+  point = { x: 1750, y: 1180 };
+  emit(pet, 'mascot:drag-move');
+  emit(pet, 'mascot:drag-end', true);
+  assert.equal(chat.getBounds().y, pet.getBounds().y + 8);
+  assert.deepEqual(chat.getSize(), [380, 520]);
+  assert.deepEqual(pet.getSize(), petSize);
+  assert.equal(chat.focusCalls, focusBeforeDrag, 'drag must not re-focus the chat');
 });

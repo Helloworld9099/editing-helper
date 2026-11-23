@@ -56,6 +56,14 @@ with sync_playwright() as pw:
     # ---------------- panel ----------------
     p, errs = open_page("panel.html")
     check("panel: loads with no console/CSP errors", not errs, errs)
+    check("panel: speech-bubble tail visible on the left by default",
+          p.evaluate("(() => {const x=getComputedStyle(document.body,'::before'); return document.body.dataset.panelSide==='right' && x.content!=='none' && x.left==='0px';})()"))
+    p.evaluate("window.__emit('panel:side', 'left')")
+    check("panel: tail points right when bubble is to the left of pet",
+          p.evaluate("(() => {const x=getComputedStyle(document.body,'::before');return document.body.dataset.panelSide==='left' && x.right==='0px';})()"))
+    p.evaluate("window.__emit('panel:side', 'right')")
+    check("panel: bubble controls fit within the panel window",
+          p.evaluate("(() => {const b=document.querySelector('.panel').getBoundingClientRect();const s=document.querySelector('#send').getBoundingClientRect();return b.left>=15 && b.right<=innerWidth && s.bottom<=innerHeight;})()"))
     check("panel: studio header is present", p.locator(".brand-symbol .slate").count() == 1 and "Your creative sidekick" in p.inner_text(".brand"))
     check("panel: no horizontal overflow", p.evaluate("document.documentElement.scrollWidth <= innerWidth"))
     compact, _ = open_page("panel.html", size=(320, 400))

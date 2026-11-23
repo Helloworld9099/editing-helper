@@ -50,7 +50,10 @@ Then point Settings back to `http://127.0.0.1:8000` and try your real FastAPI ba
 Open any other app (a text editor, browser, your video editor, anything) and verify:
 
 - [ ] Pet stays 80x80 while dragging, including over another app or across displays; position survives quit + relaunch.
-- [ ] With chat open, dragging the pet moves the chat alongside it without resizing either. Chat stays on screen and flips sides only when needed.
+- [ ] With chat open, dragging the pet moves the chat alongside it without resizing either. The triangle tail points at the pet on both sides.
+- [ ] The speech bubble's top is never higher than the pet's top, including when opening the chat near the bottom of the screen.
+- [ ] With chat open, dragging toward the bottom stops the pet high enough for the whole bubble to remain on screen; closing chat restores unrestricted pet movement.
+- [ ] Chat stays on screen and flips sides only when needed.
 - [ ] Drag the pet repeatedly left/right/up/down, including after resizing the chat manually: neither window grows. The editor keeps keyboard focus during pet dragging.
 - [ ] Right-click the pet > Chat size > Compact resizes deliberately to 320x400; Default restores 380x520. Neither changes the mascot size or steals focus while dragging.
 - [ ] Click the other app while the panel is open: panel stays visible, the other app keeps keyboard focus.
