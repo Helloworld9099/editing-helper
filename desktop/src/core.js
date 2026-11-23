@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const http = require('node:http');
 const https = require('node:https');
+const { isIP } = require('node:net');
 
 const DEFAULT_API_URL = 'http://127.0.0.1:8000';
 const COACH_PATH = '/v1/coach';
@@ -45,7 +46,8 @@ const DEFAULTS = Object.freeze({
 // ------------------------------------------------------------------ URLs
 function isLoopback(host) {
   const h = String(host || '').toLowerCase().replace(/^\[|\]$/g, '');
-  return h === 'localhost' || h === '::1' || h.startsWith('127.');
+  // DNS names such as 127.attacker.example are not loopback IPv4 addresses.
+  return h === 'localhost' || h === '::1' || (isIP(h) === 4 && h.split('.')[0] === '127');
 }
 
 function validateBaseUrl(raw) {

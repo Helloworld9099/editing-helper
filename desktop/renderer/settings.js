@@ -15,8 +15,14 @@
     $('intro').hidden = true;
   }
 
-  const cfg = await api.getConfig();
-  const supported = cfg.supportedApps || [];
+  let cfg;
+  try { cfg = await api.getConfig(); } catch { /* handled below */ }
+  if (!cfg || !Array.isArray(cfg.supportedApps)) {
+    errorEl.textContent = 'Could not load settings. Close this window and reopen it.';
+    saveBtn.disabled = true;
+    return;
+  }
+  const supported = cfg.supportedApps;
   for (const name of supported) editor.add(new Option(name, name));
   const upcoming = document.createElement('optgroup');
   upcoming.label = 'Coming soon';
@@ -37,7 +43,7 @@
     try {
       const u = new URL(raw.trim());
       const h = u.hostname.replace(/^\[|\]$/g, '').toLowerCase();
-      const loop = h === 'localhost' || h === '::1' || h.startsWith('127.');
+      const loop = h === 'localhost' || h === '::1' || /^127\.(?:\d{1,3}\.){2}\d{1,3}$/.test(h);
       if (u.protocol === 'http:' && !loop) {
         return 'Plain http:// sends your questions unencrypted. Prefer https:// for a hosted server.';
       }
@@ -57,13 +63,16 @@
       return;
     }
     saving = true;
+    saveBtn.disabled = true;
     errorEl.textContent = '';
     const payload = { editor: editor.value.trim(), editorVersion: version.value, finishSetup: mode === 'setup' };
     if (mode === 'settings') {
       Object.assign(payload, { apiBaseUrl: url.value, keepOnTop: onTop.checked, windowMode: normalMode.checked ? 'normal' : 'floating' });
     }
-    const res = await api.saveConfig(payload);
-    saving = false;
+    let res;
+    try { res = await api.saveConfig(payload); }
+    catch { res = { ok: false, errors: { form: 'Could not save settings. Try again.' } }; }
+    finally { saving = false; saveBtn.disabled = false; }
     if (!res || !res.ok) {
       const errs = (res && res.errors) || {};
       errorEl.textContent = errs.editor || errs.apiBaseUrl || errs.form || 'Could not save settings.';

@@ -61,7 +61,10 @@ with sync_playwright() as pw:
     pb, _ = open_page("panel.html", cfg={"editor": "", "editorVersion": ""})
     check("panel: works with no editing app set (generic welcome)",
           "DaVinci Resolve" not in pb.inner_text("#log") and "Choose your editor" in pb.inner_text("#log"))
+    check("panel: empty question disables Send", p.is_disabled("#send"))
+    check("panel: shows suggested questions", p.locator("#examples button").count() == 2)
     p.fill("#input", "how do I cut a clip?")
+    check("panel: typed question enables Send and counter updates", not p.is_disabled("#send") and p.inner_text("#count").startswith("20 /"))
     p.press("#input", "Enter")
     check("panel: Enter sends the question", p.evaluate("window.__calls.filter(c=>c[0]==='ask')") == [["ask", "how do I cut a clip?"]])
     check("panel: waiting state shown, send disabled", p.is_disabled("#send") and p.inner_text("#status") == "Thinking")
@@ -74,7 +77,7 @@ with sync_playwright() as pw:
           p.locator("#log img").count() == 0 and p.evaluate("window.__pwned") is None and "<img src=x" in p.inner_text("#log"))
     check("panel: newlines preserved", p.evaluate("getComputedStyle(document.querySelector('.msg.coach .body')).whiteSpace") == "pre-wrap")
     check("panel: reply does not steal focus", p.evaluate("document.activeElement.id") != "input")
-    check("panel: send re-enabled, waiting cleared", not p.is_disabled("#send") and p.inner_text("#status") == "")
+    check("panel: blank Send stays disabled, waiting cleared", p.is_disabled("#send") and p.inner_text("#status") == "")
     p.fill("#input", "line1"); p.press("#input", "Shift+Enter")
     check("panel: Shift+Enter makes a newline, doesn't send", "\n" in p.input_value("#input") and names(p).count("ask") == 1)
     p.fill("#input", "next"); p.press("#input", "Enter")
@@ -95,6 +98,12 @@ with sync_playwright() as pw:
     check("panel: long answers scroll inside the log",
           p.evaluate("(() => {const l=document.getElementById('log'); return l.scrollHeight > l.clientHeight && getComputedStyle(l).overflowY === 'auto'})()"))
     p.screenshot(path=str(OUT / "panel_long.png"))
+    p.click("#clear")
+    check("panel: Clear chat restores empty state", p.locator(".msg.user, .msg.coach, .msg.error").count() == 0
+          and p.is_visible("#examples") and p.is_disabled("#send"))
+    p.click("#examples button:first-child")
+    check("panel: example fills the draft without sending", p.input_value("#input") == "How do I make a camera shake?"
+          and not p.is_disabled("#send"))
 
     box = p.locator("#resize").bounding_box()
     x, y = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
@@ -162,6 +171,8 @@ with sync_playwright() as pw:
     check("settings: no warning for loopback http", p.inner_text("#urlWarn") == "")
     p.fill("#url", "http://coach.example.com")
     check("settings: warns about plain http to remote host", "unencrypted" in p.inner_text("#urlWarn"))
+    p.fill("#url", "http://127.attacker.example:8000")
+    check("settings: lookalike 127 hostname warns as remote", "unencrypted" in p.inner_text("#urlWarn"))
     p.evaluate("window.__saveResult = {ok:false, errors:{apiBaseUrl:'The address must start with http:// or https://'}}")
     p.fill("#url", "ftp://x"); p.click("#save"); p.wait_for_timeout(100)
     check("settings: validation error shown, window stays open", "must start with http" in p.inner_text("#error") and not p.evaluate("window.__closed"))

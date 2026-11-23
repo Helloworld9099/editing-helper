@@ -120,6 +120,10 @@ function createPanel() {
     backgroundColor: '#f7f9fb',
     webPreferences: prefs(),
   });
+  panel.webContents.on?.('did-finish-load', () => {
+    // On the first open, the renderer may load after the window becomes visible.
+    if (panelVisible()) panel.webContents.send('panel:shown');
+  });
   panel.loadFile(path.join(RENDERER, 'panel.html'));
   panel.on('close', (e) => {            // Alt+F4 / window close = collapse, not quit
     if (!quitting) { e.preventDefault(); closePanel(); }
@@ -143,7 +147,7 @@ function openPanel() {
   panel.show();                          // user-initiated, so taking focus here is expected
   panel.focus();
   if (cfg.keepOnTop) panel.setAlwaysOnTop(true, 'floating');
-  panel.webContents.send('panel:shown');
+  if (!panel.webContents.isLoadingMainFrame?.()) panel.webContents.send('panel:shown');
   mascot.webContents.send('mascot:badge', false);
 }
 
@@ -211,18 +215,20 @@ function registerIpc() {
     const windowMode = input.windowMode === 'normal' ? 'normal' : input.windowMode === 'floating' ? 'floating' : cfg.windowMode;
     const wasSetup = !cfg.setupDone;
     const restartNeeded = !wasSetup && windowMode !== cfg.windowMode;
-    Object.assign(cfg, {
+    const next = {
+      ...cfg,
       editor: input.editor,
       editorVersion: core.sanitizeText(String(input.editorVersion ?? '')).trim().slice(0, 40),
       apiBaseUrl: url,
       keepOnTop: typeof input.keepOnTop === 'boolean' ? input.keepOnTop : cfg.keepOnTop,
       windowMode,
-    });
-    if (wasSetup && input.finishSetup === true) {
-      cfg.setupDone = true;
-      normal = forceNormal || cfg.windowMode === 'normal';
-    }
-    persist();
+      setupDone: cfg.setupDone || (wasSetup && input.finishSetup === true),
+    };
+    // Do not report success or update live settings until the new config is persisted.
+    try { core.saveConfig(next, cfgFile); }
+    catch { return { ok: false, errors: { form: 'Could not save settings. Check file permissions and try again.' } }; }
+    cfg = next;
+    if (wasSetup && cfg.setupDone) normal = forceNormal || cfg.windowMode === 'normal';
     for (const w of [mascot, panel]) if (alive(w)) w.setAlwaysOnTop(cfg.keepOnTop, 'floating');
     if (wasSetup && cfg.setupDone) { createMascot(); createPanel(); }   // before setup window closes
     return { ok: true, restartNeeded };

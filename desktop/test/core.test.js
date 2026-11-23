@@ -119,6 +119,10 @@ test('validateBaseUrl', () => {
 });
 
 test('urlWarning only for plain http to non-loopback', () => {
+  assert.equal(core.isLoopback('127.attacker.example'), false);
+  assert.equal(core.isLoopback('127.0.0.1'), true);
+  assert.equal(core.isLoopback('[::1]'), true);
+  assert.match(core.urlWarning('http://127.attacker.example:8000'), /unencrypted/);
   assert.equal(core.urlWarning('http://127.0.0.1:8000'), '');
   assert.equal(core.urlWarning('http://localhost:8000'), '');
   assert.equal(core.urlWarning('https://coach.example.com'), '');
