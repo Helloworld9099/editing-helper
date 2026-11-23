@@ -155,6 +155,9 @@
     if (prior) prior.querySelector('.body').textContent = note;
     else addMessage('note', null, note);
   }
+  api.on('panel:side', (side) => {
+    if (side === 'left' || side === 'right') document.body.dataset.panelSide = side;
+  });
   api.on('panel:shown', () => { input.focus(); void showEditor(); });
   syncControls();
   void showEditor();
