@@ -7,10 +7,15 @@ const vm = require('node:vm');
 
 test('chat grip only sends resize deltas while its pointer is captured', () => {
   class Element {
-    constructor() { this.events = new Map(); }
+    constructor() {
+      this.events = new Map();
+      this.value = '';
+      this.classList = { toggle() {} };
+    }
     addEventListener(name, fn) { this.events.set(name, fn); }
     setPointerCapture(id) { this.captured = id; }
     querySelector() { return { querySelector: () => ({}) }; }
+    querySelectorAll() { return []; }
     emit(name, extra) { this.events.get(name)?.({ button: 0, pointerId: 1, screenX: 300, screenY: 300, ...extra }); }
   }
   const elements = new Map();
