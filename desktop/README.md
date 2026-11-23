@@ -27,7 +27,7 @@ npm start
    `http://127.0.0.1:8001`. Save.
 3. Ask **How do I make a camera shake?** The mock should echo the question and
    show **Editor: DaVinci Resolve**. It does not generate real instructions.
-4. Drag the pet to move it without scaling. Drag the **bottom-right corner of
+4. Drag the pet to move it without scaling or moving the open chat. Drag the **bottom-right corner of
    the chat window** outward or inward to resize the chat. The chat remembers
    its size. You can also focus the grip and use the arrow keys.
 5. Try `/long` for scrolling, `/slow` for a delayed reply, and `/err` for retry.

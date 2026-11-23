@@ -51,6 +51,7 @@ function createMascot() {
 
   mascot = new BrowserWindow({
     x: pos.x, y: pos.y, width: size, height: size, useContentSize: true,
+    ...(!normal && { minWidth: size, maxWidth: size, minHeight: size, maxHeight: size }),
     title: 'Editing Coach',
     frame: normal, transparent: !normal, hasShadow: false,
     backgroundColor: normal ? '#1f3a4d' : '#00000000',
@@ -69,7 +70,6 @@ function createMascot() {
   if (normal) {
     mascot.on('close', () => quitApp());   // closing the only visible window = quit
     mascot.on('move', () => {              // the window manager drags it; remember where it landed
-      placePanel();
       clearTimeout(moveTimer);
       moveTimer = setTimeout(savePosition, 600);
     });
@@ -105,7 +105,7 @@ function reclampMascot() {
   const [x, y] = mascot.getPosition();
   const [width, height] = mascot.getSize();
   const c = clampMascot(x, y, width, height);
-  if (c.x !== x || c.y !== y) { mascot.setPosition(c.x, c.y); savePosition(); placePanel(); }
+  if (c.x !== x || c.y !== y) { mascot.setPosition(c.x, c.y); savePosition(); }
 }
 
 // ------------------------------------------------------------- panel
@@ -248,6 +248,7 @@ function registerIpc() {
   ipcMain.on('panel:resize', (e, action, dx, dy) => {
     if (!isFrom(e, panel) || !panelVisible()) return;
     if (action === 'end') { finishPanelResize(); return; }
+    if (drag) return; // The pet and chat resize never own the pointer at the same time.
     if (action === 'start') {
       finishPanelResize();
       panelDrag = { bounds: panel.getBounds(), changed: false };
@@ -270,6 +271,7 @@ function registerIpc() {
   ipcMain.on('mascot:click', (e) => { if (isFrom(e, mascot)) (panelVisible() ? closePanel() : openPanel()); });
   ipcMain.on('mascot:drag-start', (e) => {
     if (!isFrom(e, mascot) || normal) return;
+    finishPanelResize();
     const c = screen.getCursorScreenPoint();
     const [wx, wy] = mascot.getPosition();
     drag = { cx: c.x, cy: c.y, wx, wy };
@@ -279,8 +281,8 @@ function registerIpc() {
     const [width, height] = mascot.getSize();
     const c = screen.getCursorScreenPoint();
     const p = clampMascot(drag.wx + (c.x - drag.cx), drag.wy + (c.y - drag.cy), width, height);
+    // Move only the pet. The chat is placed next to it when opened, never during a drag.
     mascot.setPosition(p.x, p.y);
-    placePanel();
   });
   ipcMain.on('mascot:drag-end', (e, moved) => {
     if (!isFrom(e, mascot)) return;
