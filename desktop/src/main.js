@@ -26,7 +26,7 @@ let drag = null, panelDrag = null;
 let panelSide = null;
 let hideTimer = null, moveTimer = null;
 const PANEL_MARGIN = 8;
-const BUBBLE_TOP_OFFSET = 8;
+const BUBBLE_TOP_OFFSET = 16; // Rounded bubble begins below the clapperboard cap.
 // Overlap only the pet's transparent window margin, so the pointer reaches its visible cheek.
 const BUBBLE_GAP = -12;
 const panelSizeForArea = (area) => ({

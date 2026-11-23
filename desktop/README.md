@@ -28,8 +28,8 @@ npm start
 3. Ask **How do I make a camera shake?** The mock should echo the question and
    show **Editor: DaVinci Resolve**. It does not generate real instructions.
 4. Drag the pet to move it without scaling: the chat is a speech bubble with
-   a triangle pointing at the pet. Its top always starts slightly below the pet's
-   top, and it switches sides near screen edges. With the chat open the pet
+   a triangle pointing toward the pet's face. Its top always starts below the
+   visible clapperboard cap, and it switches sides near screen edges. With the chat open the pet
    stays high enough for the full bubble to fit on screen. Neither window
    changes size or grabs keyboard focus during pet dragging. Drag the bottom-right
    corner of the chat window only when you actually want to resize it. The chat remembers

@@ -136,7 +136,7 @@ function defaultMascotPosition(size, area, margin = 16) {
 
 // When the chat is open, keep the pet high enough for the full speech bubble.
 // The chat itself never changes height to compensate for a drag near the bottom.
-function mascotPositionForBubble(m, panel, area, offset = 8, margin = 8) {
+function mascotPositionForBubble(m, panel, area, offset = 16, margin = 8) {
   const p = clampToArea(m.x, m.y, m.width, m.height, area, margin);
   const lastY = area.y + area.height - margin - panel.height - offset;
   return { ...p, y: Math.min(p.y, Math.max(area.y + margin, lastY)) };
@@ -144,7 +144,7 @@ function mascotPositionForBubble(m, panel, area, offset = 8, margin = 8) {
 
 // Keep the bubble on its current side until the available space requires a flip.
 // Its top is just below the pet's top, so it never towers over the mascot.
-function panelPosition(m, panel, area, gap = 4, margin = 8, preferredSide = null, offset = 8) {
+function panelPosition(m, panel, area, gap = 4, margin = 8, preferredSide = null, offset = 16) {
   const leftX = m.x - gap - panel.width;
   const rightX = m.x + m.width + gap;
   const leftFits = leftX >= area.x + margin;
