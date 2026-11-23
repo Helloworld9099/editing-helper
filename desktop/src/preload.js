@@ -2,7 +2,7 @@
 // The only bridge between the web UI and the app. The UI has no Node access and no network access.
 const { contextBridge, ipcRenderer } = require('electron');
 
-const EVENTS = new Set(['panel:shown', 'mascot:busy', 'mascot:badge']);
+const EVENTS = new Set(['panel:shown', 'panel:side', 'mascot:busy', 'mascot:badge']);
 
 contextBridge.exposeInMainWorld('coach', {
   getConfig: () => ipcRenderer.invoke('config:get'),

@@ -178,6 +178,41 @@ test('panelPosition: opens toward the roomy side and stays on screen', () => {
   assert.ok(corner.x >= 0 && corner.x + 380 <= 1920 && corner.y >= 0 && corner.y + 520 <= 1080);
 });
 
+test('speech bubble stays below the pet and inside the work area', () => {
+  const pane = { width: 380, height: 520 };
+  const cases = [
+    { area, start: { x: 1700, y: 1000, width: 80, height: 80 } },
+    { area: { x: -1280, y: 50, width: 1280, height: 720 }, start: { x: -1200, y: 690, width: 80, height: 80 } },
+    { area: { x: 1920, y: 0, width: 1280, height: 720 }, start: { x: 3100, y: 640, width: 80, height: 80 } },
+  ];
+  for (const { area: work, start } of cases) {
+    const pet = core.mascotPositionForBubble(start, pane, work);
+    const bubble = core.panelPosition({ ...start, ...pet }, pane, work, -10);
+    assert.equal(bubble.y, pet.y + 16);
+    assert.ok(bubble.y >= pet.y, 'chat must never start above pet');
+    assert.ok(bubble.y + pane.height <= work.y + work.height - 8);
+    assert.ok(bubble.x >= work.x + 8);
+    assert.ok(bubble.x + pane.width <= work.x + work.width - 8);
+  }
+  const bottomPet = core.mascotPositionForBubble({ x: 1700, y: 1020, width: 80, height: 80 }, pane, area);
+  assert.equal(bottomPet.y, 536, 'pet moves up once rather than pushing the chat above it');
+});
+
+test('speech bubble top alignment holds over repeated simulated drag positions', () => {
+  const work = { x: 0, y: 0, width: 1280, height: 720 };
+  const pane = { width: 320, height: 400 };
+  let previousSide = null;
+  for (let i = 0; i < 200; i++) {
+    const m = { x: i * 11 % 1300, y: i * 29 % 760, width: 80, height: 80 };
+    const pet = core.mascotPositionForBubble(m, pane, work);
+    const bubble = core.panelPosition({ ...m, ...pet }, pane, work, -10, 8, previousSide);
+    previousSide = bubble.side;
+    assert.equal(bubble.y, pet.y + 16);
+    assert.ok(bubble.x >= 8 && bubble.x + pane.width <= work.width - 8);
+    assert.ok(bubble.y + pane.height <= work.height - 8);
+  }
+});
+
 test('panel follows on preferred side without flipping at midpoint', () => {
   const m = { x: 1070, y: 510, width: 80, height: 80 };
   const pane = { width: 380, height: 520 };

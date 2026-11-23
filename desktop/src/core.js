@@ -134,9 +134,17 @@ function defaultMascotPosition(size, area, margin = 16) {
   return clampToArea(area.x + area.width - size - margin, area.y + Math.round(area.height / 2 - size / 2), size, size, area, 8);
 }
 
-// Keep the panel on the same side during a drag until it would run off screen.
-// This avoids an unnecessary side-switch as the pet crosses the screen's midpoint.
-function panelPosition(m, panel, area, gap = 8, margin = 8, preferredSide = null) {
+// When the chat is open, keep the pet high enough for the full speech bubble.
+// The chat itself never changes height to compensate for a drag near the bottom.
+function mascotPositionForBubble(m, panel, area, offset = 16, margin = 8) {
+  const p = clampToArea(m.x, m.y, m.width, m.height, area, margin);
+  const lastY = area.y + area.height - margin - panel.height - offset;
+  return { ...p, y: Math.min(p.y, Math.max(area.y + margin, lastY)) };
+}
+
+// Keep the bubble on its current side until the available space requires a flip.
+// Its top is just below the pet's top, so it never towers over the mascot.
+function panelPosition(m, panel, area, gap = 4, margin = 8, preferredSide = null, offset = 16) {
   const leftX = m.x - gap - panel.width;
   const rightX = m.x + m.width + gap;
   const leftFits = leftX >= area.x + margin;
@@ -146,7 +154,7 @@ function panelPosition(m, panel, area, gap = 8, margin = 8, preferredSide = null
   if (side === 'left' && !leftFits && rightFits) side = 'right';
   if (side === 'right' && !rightFits && leftFits) side = 'left';
   const x = side === 'left' ? leftX : rightX;
-  const y = m.y + Math.round(m.height / 2 - panel.height / 2);
+  const y = m.y + offset;
   return { ...clampToArea(x, y, panel.width, panel.height, area, margin), side };
 }
 
@@ -257,5 +265,5 @@ function postCoach({ baseUrl, question, editor, version, timeoutMs = 90000 }) {
 module.exports = {
   DEFAULT_API_URL, COACH_PATH, MAX_QUESTION_CHARS, MAX_RESPONSE_BYTES, SUPPORTED_APPS, UPCOMING_APPS, DEFAULTS,
   panelResize, isLoopback, validateBaseUrl, urlWarning, loadConfig, saveConfig,
-  clampToArea, defaultMascotPosition, panelPosition, sanitizeText, postCoach,
+  clampToArea, defaultMascotPosition, mascotPositionForBubble, panelPosition, sanitizeText, postCoach,
 };

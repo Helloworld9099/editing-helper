@@ -26,6 +26,13 @@ let drag = null, panelDrag = null;
 let panelSide = null;
 let hideTimer = null, moveTimer = null;
 const PANEL_MARGIN = 8;
+const BUBBLE_TOP_OFFSET = 16; // Rounded bubble begins below the clapperboard cap.
+// Overlap only the pet's transparent window margin, so the pointer reaches its visible cheek.
+const BUBBLE_GAP = -10;
+const panelSizeForArea = (area) => ({
+  width: Math.max(1, Math.min(cfg.panelWidth, area.width - PANEL_MARGIN * 2)),
+  height: Math.max(1, Math.min(cfg.panelHeight, area.height - PANEL_MARGIN * 2 - BUBBLE_TOP_OFFSET)),
+});
 
 const alive = (w) => w && !w.isDestroyed();
 const prefs = () => ({
@@ -40,9 +47,12 @@ const isOurs = (e) => isFrom(e, mascot) || isFrom(e, panel) || isFrom(e, setting
 const publicConfig = () => ({ ...cfg, normal, supportedApps: core.SUPPORTED_APPS, upcomingApps: core.UPCOMING_APPS });
 
 // ------------------------------------------------------------ mascot
-function clampMascot(x, y, width, height) {
-  const area = screen.getDisplayMatching({ x, y, width, height }).workArea;
-  return core.clampToArea(x, y, width, height, area, 8);
+function clampMascot(x, y, width, height, withChat = panelVisible()) {
+  const m = { x, y, width, height };
+  const area = screen.getDisplayMatching(m).workArea;
+  return withChat
+    ? core.mascotPositionForBubble(m, panelSizeForArea(area), area, BUBBLE_TOP_OFFSET, PANEL_MARGIN)
+    : core.clampToArea(x, y, width, height, area, PANEL_MARGIN);
 }
 
 function createMascot() {
@@ -71,7 +81,8 @@ function createMascot() {
 
   if (normal) {
     mascot.on('close', () => quitApp());   // closing the only visible window = quit
-    mascot.on('move', () => {              // the window manager drags it; remember where it landed
+    mascot.on('move', () => {              // normal-window fallback is moved by the window manager
+      if (panelVisible()) placePanel(true);
       clearTimeout(moveTimer);
       moveTimer = setTimeout(savePosition, 600);
     });
@@ -130,14 +141,16 @@ function createPanel() {
   panel = new BrowserWindow({
     width: cfg.panelWidth, height: cfg.panelHeight, show: false,
     title: 'Editing Coach',
-    frame: normal, resizable: false, maximizable: false, fullscreenable: false, minimizable: normal,
+    frame: normal, transparent: !normal, hasShadow: false,
+    resizable: false, maximizable: false, fullscreenable: false, minimizable: normal,
     skipTaskbar: !normal,
     alwaysOnTop: cfg.keepOnTop,
-    backgroundColor: '#f7f9fb',
+    backgroundColor: normal ? '#f5f7f4' : '#00000000',
     webPreferences: prefs(),
   });
   panel.webContents.on?.('did-finish-load', () => {
-    // On the first open, the renderer may load after the window becomes visible.
+    // The side event may have been sent before the renderer installed its listener.
+    if (panelSide) panel.webContents.send('panel:side', panelSide);
     if (panelVisible()) panel.webContents.send('panel:shown');
   });
   panel.loadFile(path.join(RENDERER, 'panel.html'));
@@ -151,20 +164,28 @@ function createPanel() {
 // each drag event (as observed on Ubuntu/XWayland). Keep a single fixed geometry.
 function placePanel(followingDrag = false) {
   if (!alive(panel) || !alive(mascot)) return;
-  const m = mascot.getBounds();
+  let m = mascot.getBounds();
   const area = screen.getDisplayMatching(m).workArea;
-  const width = Math.max(1, Math.min(cfg.panelWidth, area.width - PANEL_MARGIN * 2));
-  const height = Math.max(1, Math.min(cfg.panelHeight, area.height - PANEL_MARGIN * 2));
+  const { width, height } = panelSizeForArea(area);
+  // Opening a tall bubble near the bottom must bring the pet into view, rather
+  // than placing the bubble above it. During dragging clampMascot does this first.
+  const anchored = core.mascotPositionForBubble(m, { width, height }, area, BUBBLE_TOP_OFFSET, PANEL_MARGIN);
+  if (anchored.x !== m.x || anchored.y !== m.y) {
+    if (normal) mascot.setPosition(anchored.x, anchored.y);
+    else mascot.setBounds({ x: anchored.x, y: anchored.y, width: MASCOT_SIZE, height: MASCOT_SIZE });
+    m = { ...m, x: anchored.x, y: anchored.y };
+  }
   const { x, y, side } = core.panelPosition(
-    m, { width, height }, area, 8, PANEL_MARGIN, followingDrag ? panelSide : null
+    m, { width, height }, area, BUBBLE_GAP, PANEL_MARGIN, followingDrag ? panelSide : null, BUBBLE_TOP_OFFSET
   );
+  const sideChanged = side !== panelSide;
   panelSide = side;
   const current = panel.getBounds();
   if (current.x !== x || current.y !== y || current.width !== width || current.height !== height) {
-    // Move and size in one call instead of setPosition(). Some Linux window
-    // managers modify the window geometry during repeated position updates.
+    // Full bounds preserve the saved size even when the Linux WM moves the window.
     panel.setBounds({ x, y, width, height });
   }
+  if (sideChanged) panel.webContents.send('panel:side', side);
 }
 
 function openPanel() {
@@ -194,7 +215,10 @@ function savePanelSize() {
 }
 
 function finishPanelResize() {
-  if (panelDrag?.changed) savePanelSize();
+  if (panelDrag?.changed) {
+    savePanelSize();
+    if (panelVisible()) placePanel(true);
+  }
   panelDrag = null;
 }
 

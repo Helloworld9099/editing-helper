@@ -1,10 +1,28 @@
-body { overflow: hidden; }
+/* The transparent 14px gutter is part of this window; it houses a real
+   speech-bubble tail without overlay windows or pet resizing. */
+html, body { background: transparent; }
+body { position: relative; overflow: hidden; }
 .panel {
-  position: relative; display: flex; flex-direction: column;
-  height: 100vh; overflow: hidden;
-  border: 1px solid #bddbd2; border-radius: 9px;
+  position: absolute; display: flex; flex-direction: column;
+  top: 2px; bottom: 2px; left: 16px; right: 3px;
+  height: auto; overflow: hidden;
+  border: 1px solid #bddbd2; border-radius: 15px;
   background: var(--canvas);
+  box-shadow: 0 4px 12px rgba(12, 61, 52, .13);
 }
+body[data-panel-side="left"] .panel { left: 3px; right: 16px; }
+body::before, body::after {
+  content: ""; position: absolute; pointer-events: none; z-index: 2;
+  clip-path: polygon(0 50%, 100% 0, 100% 100%);
+}
+body::before { top: 29px; left: 0; width: 19px; height: 26px; background: #bddbd2; }
+body::after { top: 31px; left: 3px; width: 15px; height: 22px; background: #e5f3eb; }
+body[data-panel-side="left"]::before,
+body[data-panel-side="left"]::after {
+  clip-path: polygon(0 0, 100% 50%, 0 100%);
+}
+body[data-panel-side="left"]::before { left: auto; right: 0; }
+body[data-panel-side="left"]::after { left: auto; right: 3px; }
 .topbar {
   flex: 0 0 auto;
   display: flex; align-items: center; justify-content: space-between;
