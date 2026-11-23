@@ -18,6 +18,7 @@
     counter.classList.toggle('near-limit', length >= MAX_CHARS);
     sendBtn.disabled = busy || !input.value.trim() || length > MAX_CHARS;
     clearBtn.disabled = busy || messageCount === 0;
+    log.classList.toggle('empty', messageCount === 0);
   }
 
   // Everything is added with textContent: replies are shown as plain text, never as markup or script.
