@@ -23,6 +23,7 @@ let mascot = null, panel = null, settingsWin = null;
 let busy = false;
 let quitting = false;
 let drag = null, panelDrag = null;
+let panelSide = null;
 let hideTimer = null, moveTimer = null;
 
 const alive = (w) => w && !w.isDestroyed();
@@ -125,12 +126,13 @@ function createPanel() {
   });
 }
 
-function placePanel() {
+function placePanel(followingDrag = false) {
   if (!alive(panel) || !alive(mascot)) return;
   const m = mascot.getBounds();
   const [width, height] = panel.getSize();
   const area = screen.getDisplayMatching(m).workArea;
-  const { x, y } = core.panelPosition(m, { width, height }, area);
+  const { x, y, side } = core.panelPosition(m, { width, height }, area, 8, 8, followingDrag ? panelSide : null);
+  panelSide = side;
   panel.setPosition(x, y);
 }
 
@@ -278,11 +280,12 @@ function registerIpc() {
   });
   ipcMain.on('mascot:drag-move', (e) => {
     if (!isFrom(e, mascot) || !drag) return;
-    const [width, height] = mascot.getSize();
     const c = screen.getCursorScreenPoint();
-    const p = clampMascot(drag.wx + (c.x - drag.cx), drag.wy + (c.y - drag.cy), width, height);
-    // Move only the pet. The chat is placed next to it when opened, never during a drag.
-    mascot.setPosition(p.x, p.y);
+    const p = clampMascot(drag.wx + (c.x - drag.cx), drag.wy + (c.y - drag.cy), MASCOT_SIZE, MASCOT_SIZE);
+    // Set position and size together: compositor/window-manager changes cannot grow the pet.
+    mascot.setBounds({ x: p.x, y: p.y, width: MASCOT_SIZE, height: MASCOT_SIZE });
+    // Follow the pet while the chat is open, without changing the chat's dimensions.
+    if (panelVisible()) placePanel(true);
   });
   ipcMain.on('mascot:drag-end', (e, moved) => {
     if (!isFrom(e, mascot)) return;

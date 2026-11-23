@@ -8,7 +8,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const core = require('../src/core');
 
-test('pet movement affects only position, even with the chat open and a stale resize in flight', async (t) => {
+test('pet remains 80px and the open chat follows during drag without resizing', async (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'editing-coach-window-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   core.saveConfig({ ...core.DEFAULTS, setupDone: true, editor: 'DaVinci Resolve', mascotX: 900, mascotY: 400 }, path.join(dir, 'config.json'));
@@ -56,6 +56,8 @@ test('pet movement affects only position, even with the chat open and a stale re
   emit(pet, 'mascot:click');
   const originalChat = { ...chat.getBounds() };
   const petSize = pet.getSize();
+  // Simulate an unexpected compositor/window size change prior to dragging.
+  pet.setBounds({ ...pet.getBounds(), width: 160, height: 160 });
   emit(chat, 'panel:resize', 'start');
   emit(pet, 'mascot:drag-start');
   emit(chat, 'panel:resize', 'move', 100, 100);
@@ -64,7 +66,12 @@ test('pet movement affects only position, even with the chat open and a stale re
   emit(pet, 'mascot:drag-end', true);
   assert.deepEqual(pet.getPosition(), [1070, 510]);
   assert.deepEqual(pet.getSize(), petSize);
-  assert.deepEqual(chat.getBounds(), originalChat);
+  assert.deepEqual(petSize, [80, 80]);
+  assert.deepEqual(chat.getSize(), [originalChat.width, originalChat.height]);
+  // The panel tracks the pet, staying on its original side until it would hit an edge.
+  const expected = core.panelPosition(pet.getBounds(), { width: originalChat.width, height: originalChat.height }, display.workArea, 8, 8, 'right');
+  assert.deepEqual(chat.getPosition(), [expected.x, expected.y]);
+  assert.notDeepEqual(chat.getPosition(), [originalChat.x, originalChat.y]);
   emit(chat, 'panel:resize', 'start');
   emit(chat, 'panel:resize', 'move', 50, 40);
   emit(chat, 'panel:resize', 'end');

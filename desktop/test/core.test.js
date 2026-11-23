@@ -174,6 +174,17 @@ test('panelPosition: opens toward the roomy side and stays on screen', () => {
   assert.ok(corner.x >= 0 && corner.x + 380 <= 1920 && corner.y >= 0 && corner.y + 520 <= 1080);
 });
 
+test('panel follows on preferred side without flipping at midpoint', () => {
+  const m = { x: 1070, y: 510, width: 80, height: 80 };
+  const pane = { width: 380, height: 520 };
+  const p = core.panelPosition(m, pane, area, 8, 8, 'right');
+  assert.equal(p.side, 'right');
+  assert.equal(p.x, 1158);
+  const atEdge = core.panelPosition({ ...m, x: 1700 }, pane, area, 8, 8, 'right');
+  assert.equal(atEdge.side, 'left');
+  assert.ok(atEdge.x >= 8);
+});
+
 test('sanitizeText strips control characters but keeps newlines', () => {
   assert.equal(core.sanitizeText('a\u0000b\u001b[31m\r\nc\td'), 'ab[31m\nc\td');
 });

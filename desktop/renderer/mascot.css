@@ -1,8 +1,10 @@
 html, body { background: transparent; overflow: hidden; margin: 0; width: 100%; height: 100%; user-select: none; -webkit-user-select: none; }
 body { position: relative; }
-#pet { width: 100%; height: 100%; cursor: grab; touch-action: none; border-radius: 50%; }
+/* The transparent floating window has a fixed 80px content size. Never scale the
+   artwork in response to a compositor/window resize while dragging. */
+#pet { width: 80px; height: 80px; max-width: 80px; max-height: 80px; cursor: grab; touch-action: none; border-radius: 50%; }
 #pet.dragging { cursor: grabbing; }
-#pet svg { display: block; width: 100%; height: 100%; pointer-events: none; }
+#pet svg { display: block; width: 80px; height: 80px; pointer-events: none; }
 .badge { display: none; }
 #pet.badge-on .badge { display: block; }
 #pet.busy .eyes { animation: glance .9s ease-in-out infinite alternate; }
