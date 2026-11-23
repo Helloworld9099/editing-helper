@@ -187,7 +187,7 @@ test('speech bubble stays below the pet and inside the work area', () => {
   ];
   for (const { area: work, start } of cases) {
     const pet = core.mascotPositionForBubble(start, pane, work);
-    const bubble = core.panelPosition({ ...start, ...pet }, pane, work, -12);
+    const bubble = core.panelPosition({ ...start, ...pet }, pane, work, -10);
     assert.equal(bubble.y, pet.y + 16);
     assert.ok(bubble.y >= pet.y, 'chat must never start above pet');
     assert.ok(bubble.y + pane.height <= work.y + work.height - 8);
@@ -205,7 +205,7 @@ test('speech bubble top alignment holds over repeated simulated drag positions',
   for (let i = 0; i < 200; i++) {
     const m = { x: i * 11 % 1300, y: i * 29 % 760, width: 80, height: 80 };
     const pet = core.mascotPositionForBubble(m, pane, work);
-    const bubble = core.panelPosition({ ...m, ...pet }, pane, work, -12, 8, previousSide);
+    const bubble = core.panelPosition({ ...m, ...pet }, pane, work, -10, 8, previousSide);
     previousSide = bubble.side;
     assert.equal(bubble.y, pet.y + 16);
     assert.ok(bubble.x >= 8 && bubble.x + pane.width <= work.width - 8);

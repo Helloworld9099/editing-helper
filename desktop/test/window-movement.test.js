@@ -94,7 +94,7 @@ test('pet remains 80px and the open chat follows during drag without resizing', 
   assert.equal(chat.positionCalls, 0, 'following the pet must never call setPosition on the chat');
   assert.equal(chat.focusCalls, focusOnOpen, 'dragging must never focus the chat');
   // The panel tracks the pet, staying on its original side until it would hit an edge.
-  const expected = core.panelPosition(pet.getBounds(), { width: originalChat.width, height: originalChat.height }, display.workArea, -12, 8, 'right');
+  const expected = core.panelPosition(pet.getBounds(), { width: originalChat.width, height: originalChat.height }, display.workArea, -10, 8, 'right');
   assert.deepEqual(chat.getPosition(), [expected.x, expected.y]);
   assert.notDeepEqual(chat.getPosition(), [originalChat.x, originalChat.y]);
   assert.equal(chat.getBounds().y, pet.getBounds().y + 16, 'chat begins below the pet top');
