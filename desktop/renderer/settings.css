@@ -18,3 +18,13 @@ p { margin: 5px 0 0; }
 .warn:empty, .error:empty { display: none; }
 .buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
 body[data-mode="setup"] .settings-only { display: none; }
+
+/* Setup uses a shorter native Electron window than the full Settings screen. */
+body[data-mode="setup"] form { padding: 16px 22px 18px; }
+body[data-mode="setup"] h1 { font-size: 21px; margin-bottom: 5px; }
+body[data-mode="setup"] .intro { margin: 0 0 10px; font-size: 13px; line-height: 1.45; }
+body[data-mode="setup"] label { margin: 10px 0 3px; }
+body[data-mode="setup"] select, body[data-mode="setup"] input[type="text"] { min-height: 35px; padding: 7px 10px; }
+body[data-mode="setup"] p { margin-top: 3px; }
+body[data-mode="setup"] .error { min-height: 0; margin-top: 8px; }
+body[data-mode="setup"] .buttons { margin-top: 10px; }

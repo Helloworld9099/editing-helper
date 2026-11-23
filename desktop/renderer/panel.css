@@ -140,3 +140,8 @@ textarea:focus { border-color: #4e978b; box-shadow: 0 0 0 2px rgba(31,124,111,.1
   .actions .ghost { padding-inline: 7px; }
 }
 @media (prefers-reduced-motion: reduce) { .status.busy::before { animation: none; } }
+
+@media (max-height: 350px) {
+  #log.empty .msg.note .note-mark { display: none; }
+  #log.empty .msg.note h2 { margin: 0 0 5px; }
+}
