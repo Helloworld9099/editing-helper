@@ -201,16 +201,23 @@ test('client sends the selected editor and optional version; rejects unsupported
   });
 });
 
-test('mascot zoom cycles through fixed levels and persists separately from drag position', () => {
-  let size = core.DEFAULTS.mascotSize;
-  assert.equal(size, 80);
-  for (const next of [96, 120, 144, 80]) {
-    size = core.nextMascotSize(size);
-    assert.equal(size, next);
-  }
+test('panel resize applies inward and outward deltas and respects screen edges', () => {
+  const bounds = { x: 32, y: 40, width: 380, height: 520 };
+  assert.deepEqual(core.panelResize(bounds, 100, 60, area), { width: 480, height: 580 });
+  assert.deepEqual(core.panelResize(bounds, -30, -45, area), { width: 350, height: 475 });
+  assert.deepEqual(core.panelResize(bounds, 0, 0, area), { width: 380, height: 520 });
+  assert.deepEqual(core.panelResize(bounds, -9999, -9999, area), { width: 300, height: 300 });
+  const secondary = { x: -1280, y: 0, width: 1280, height: 720 };
+  assert.deepEqual(core.panelResize({ ...bounds, x: -600 }, 9999, 9999, secondary), { width: 592, height: 672 });
+});
+
+test('chat dimensions persist without changing the saved mascot position', () => {
   const f = tmpFile();
-  core.saveConfig({ ...core.DEFAULTS, mascotSize: 144, mascotX: 22, mascotY: 23 }, f);
-  assert.equal(core.loadConfig(f).mascotSize, 144);
-  fs.writeFileSync(f, JSON.stringify({ mascotSize: 9999 }));
-  assert.equal(core.loadConfig(f).mascotSize, 80);
+  core.saveConfig({ ...core.DEFAULTS, panelWidth: 660, panelHeight: 590, mascotX: 22, mascotY: 23 }, f);
+  const cfg = core.loadConfig(f);
+  assert.deepEqual([cfg.panelWidth, cfg.panelHeight, cfg.mascotX, cfg.mascotY], [660, 590, 22, 23]);
+  fs.writeFileSync(f, JSON.stringify({ panelWidth: 9999, panelHeight: -1, mascotSize: 144 }));
+  const invalid = core.loadConfig(f);
+  assert.deepEqual([invalid.panelWidth, invalid.panelHeight], [380, 520]);
+  assert.equal(invalid.mascotSize, undefined);
 });

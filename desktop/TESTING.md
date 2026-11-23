@@ -53,6 +53,8 @@ Open any other app (a text editor, browser, your video editor, anything) and ver
 - [ ] Click the other app while the panel is open: panel stays visible, the other app keeps keyboard focus.
 - [ ] Send a question, immediately click the other app and keep typing there. When the reply lands, your typing
       is not interrupted (a yellow dot may appear on the pet if the panel was collapsed).
+- [ ] Drag the chat corner outward and inward; a click alone does not resize.
+      Dragging the pet still moves it without resizing it. The chat size persists on relaunch.
 - [ ] Esc collapses; clicking the pet toggles; dragging doesn't open the panel; right-click menu works.
 - [ ] Hide 10 min, then launch `npm start` again: pet returns.
 - [ ] Works the same over a non-editing app, since the widget never reads or controls other apps.

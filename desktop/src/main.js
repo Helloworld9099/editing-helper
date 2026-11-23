@@ -11,7 +11,7 @@ if (process.platform === 'linux' && !process.env.EDITING_COACH_NATIVE_WAYLAND) {
 }
 app.setPath('userData', path.join(app.getPath('appData'), 'editing-coach'));
 
-const PANEL_SIZE = { width: 380, height: 520 };
+const MASCOT_SIZE = 80;
 const HIDE_MS = 10 * 60 * 1000;
 const forceNormal = process.argv.includes('--normal-window');
 const RENDERER = path.join(__dirname, '..', 'renderer');
@@ -22,7 +22,7 @@ let normal = false;            // regular framed windows instead of the borderle
 let mascot = null, panel = null, settingsWin = null;
 let busy = false;
 let quitting = false;
-let drag = null;
+let drag = null, panelDrag = null;
 let hideTimer = null, moveTimer = null;
 
 const alive = (w) => w && !w.isDestroyed();
@@ -44,7 +44,7 @@ function clampMascot(x, y, width, height) {
 }
 
 function createMascot() {
-  const size = cfg.mascotSize;
+  const size = MASCOT_SIZE;
   const pos = cfg.mascotX == null || cfg.mascotY == null
     ? core.defaultMascotPosition(size, screen.getPrimaryDisplay().workArea)
     : clampMascot(cfg.mascotX, cfg.mascotY, size, size);
@@ -111,7 +111,7 @@ function reclampMascot() {
 // ------------------------------------------------------------- panel
 function createPanel() {
   panel = new BrowserWindow({
-    ...PANEL_SIZE, useContentSize: true, show: false,
+    width: cfg.panelWidth, height: cfg.panelHeight, show: false,
     title: 'Editing Coach',
     frame: normal, resizable: false, maximizable: false, fullscreenable: false, minimizable: normal,
     skipTaskbar: !normal,
@@ -146,10 +146,33 @@ function openPanel() {
 }
 
 function closePanel() {
+  finishPanelResize();
   if (alive(panel)) panel.hide();
 }
 
 const panelVisible = () => alive(panel) && panel.isVisible();
+
+function savePanelSize() {
+  if (!alive(panel)) return;
+  const [width, height] = panel.getSize();
+  cfg.panelWidth = width;
+  cfg.panelHeight = height;
+  persist();
+}
+
+function finishPanelResize() {
+  if (panelDrag?.changed) savePanelSize();
+  panelDrag = null;
+}
+
+function resizePanelFrom(bounds, dx, dy) {
+  const area = screen.getDisplayMatching(bounds).workArea;
+  const size = core.panelResize(bounds, dx, dy, area);
+  const [width, height] = panel.getSize();
+  if (width === size.width && height === size.height) return false;
+  panel.setBounds(size);
+  return true;
+}
 
 // ---------------------------------------------------------- settings
 function openSettings(mode = 'settings') {
@@ -222,6 +245,22 @@ function registerIpc() {
     return result;
   });
 
+  ipcMain.on('panel:resize', (e, action, dx, dy) => {
+    if (!isFrom(e, panel) || !panelVisible()) return;
+    if (action === 'end') { finishPanelResize(); return; }
+    if (action === 'start') {
+      finishPanelResize();
+      panelDrag = { bounds: panel.getBounds(), changed: false };
+      return;
+    }
+    if (!Number.isFinite(dx) || !Number.isFinite(dy)) return;
+    if (action === 'move' && panelDrag) {
+      if (resizePanelFrom(panelDrag.bounds, dx, dy)) panelDrag.changed = true;
+    } else if (action === 'key' && !panelDrag && Math.abs(dx) <= 16 && Math.abs(dy) <= 16) {
+      if (resizePanelFrom(panel.getBounds(), dx, dy)) savePanelSize();
+    }
+  });
+
   ipcMain.on('panel:close', (e) => { if (isFrom(e, panel)) closePanel(); });
   ipcMain.on('app:open-settings', (e) => { if (isOurs(e)) openSettings('settings'); });
   ipcMain.on('app:quit', (e) => { if (isOurs(e)) quitApp(); });
@@ -248,20 +287,6 @@ function registerIpc() {
     if (drag && moved === true) savePosition();
     drag = null;
   });
-  ipcMain.on('mascot:zoom', (e) => {
-    if (!isFrom(e, mascot) || drag) return;
-    const size = core.nextMascotSize(cfg.mascotSize);
-    const old = mascot.getBounds();
-    const [contentWidth, contentHeight] = mascot.getContentSize();
-    const width = size + Math.max(0, old.width - contentWidth);
-    const height = size + Math.max(0, old.height - contentHeight);
-    const area = screen.getDisplayMatching(old).workArea;
-    const pos = core.clampToArea(old.x, old.y, width, height, area, 8);
-    mascot.setBounds({ ...pos, width, height });
-    cfg.mascotSize = size;
-    placePanel();
-    savePosition();
-  });
   ipcMain.on('mascot:menu', (e) => {
     if (!isFrom(e, mascot)) return;
     Menu.buildFromTemplate([
@@ -284,7 +309,7 @@ if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.on('second-instance', showMascot);          // launching again brings a hidden pet back
-  app.on('before-quit', () => { quitting = true; savePosition(); });
+  app.on('before-quit', () => { quitting = true; finishPanelResize(); savePosition(); });
   app.on('window-all-closed', () => app.quit());
 
   app.on('web-contents-created', (_e, wc) => {     // the UI can't open windows or navigate away

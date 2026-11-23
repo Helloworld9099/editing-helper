@@ -2,7 +2,6 @@
   'use strict';
   const pet = document.getElementById('pet');
   const api = window.coach;
-  document.getElementById('zoom').addEventListener('click', () => api.mascot.zoom());
   const cfg = await api.getConfig();
   const canDrag = !(cfg && cfg.normal);   // in normal-window mode the window manager moves it
   const THRESHOLD = 5;

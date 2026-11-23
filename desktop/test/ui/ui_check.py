@@ -23,11 +23,12 @@ STUB = """
     getConfig: async () => cfg,
     saveConfig: async (c) => { calls.push(['save', c]); return window.__saveResult; },
     ask: (q) => { calls.push(['ask', q]); return new Promise(r => { pending = r; }); },
+    resizePanel: (...args) => calls.push(['resizePanel', ...args]),
     closePanel: () => calls.push(['closePanel']),
     openSettings: () => calls.push(['openSettings']),
     quit: () => calls.push(['quit']),
     mascot: { dragStart: () => calls.push(['dragStart']), dragMove: () => calls.push(['dragMove']),
-              dragEnd: (moved) => calls.push(['dragEnd', moved]), zoom: () => calls.push(['zoom']), click: () => calls.push(['click']), menu: () => calls.push(['menu']) },
+              dragEnd: (moved) => calls.push(['dragEnd', moved]), click: () => calls.push(['click']), menu: () => calls.push(['menu']) },
     on: (ch, cb) => { (listeners[ch] = listeners[ch] || []).push(cb); return () => {}; },
   };
 })();
@@ -95,6 +96,18 @@ with sync_playwright() as pw:
           p.evaluate("(() => {const l=document.getElementById('log'); return l.scrollHeight > l.clientHeight && getComputedStyle(l).overflowY === 'auto'})()"))
     p.screenshot(path=str(OUT / "panel_long.png"))
 
+    box = p.locator("#resize").bounding_box()
+    x, y = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+    p.evaluate("window.__calls.length = 0")
+    p.mouse.click(x, y)
+    check("panel: grip click alone doesn't resize", p.evaluate("window.__calls") == [["resizePanel", "start"], ["resizePanel", "end"]])
+    p.evaluate("window.__calls.length = 0")
+    p.mouse.move(x, y); p.mouse.down(); p.mouse.move(x + 40, y + 30); p.mouse.move(x - 40, y - 25); p.mouse.up()
+    resize_calls = p.evaluate("window.__calls")
+    check("panel: grip captures outward and inward movement", resize_calls == [
+        ["resizePanel", "start"], ["resizePanel", "move", 40, 30],
+        ["resizePanel", "move", -40, -25], ["resizePanel", "end"]], resize_calls)
+
     # ---------------- mascot ----------------
     p, errs = open_page("mascot.html", size=(96, 96))
     check("mascot: loads with no console/CSP errors", not errs, errs)
@@ -119,9 +132,7 @@ with sync_playwright() as pw:
     p.evaluate("window.__calls.length = 0"); p.focus("#pet"); p.keyboard.press("Enter")
     check("mascot: keyboard Enter opens panel (accessibility)", names(p) == ["click"])
     check("mascot: hovering does not scale the artwork", p.locator("#pet svg").evaluate("(svg) => getComputedStyle(svg).transform") == "none")
-    p.evaluate("window.__calls.length = 0")
-    p.click("#zoom")
-    check("mascot: zoom button sends only zoom, not move or panel click", names(p) == ["zoom"], names(p))
+    check("mascot: no resize grip", p.locator("#zoom, #resize").count() == 0)
     p.screenshot(path=str(OUT / "mascot.png"), omit_background=True)
 
     p, _ = open_page("mascot.html", cfg={"normal": True, "windowMode": "normal"}, size=(96, 96))

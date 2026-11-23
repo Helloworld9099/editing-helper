@@ -14,10 +14,18 @@ const MAX_QUESTION_CHARS = 1000; // matches /v1/coach
 const SUPPORTED_APPS = Object.freeze(['DaVinci Resolve']);
 const UPCOMING_APPS = Object.freeze(['Kdenlive', 'Adobe Premiere Pro', 'Final Cut Pro', 'CapCut', 'Shotcut', 'OpenShot']);
 
-const MASCOT_SIZES = Object.freeze([80, 96, 120, 144]);
+const PANEL_MIN = Object.freeze({ width: 300, height: 300 });
+const PANEL_MAX = Object.freeze({ width: 1200, height: 1000 });
 
-function nextMascotSize(size) {
-  return MASCOT_SIZES[(MASCOT_SIZES.indexOf(size) + 1) % MASCOT_SIZES.length];
+function panelResize(bounds, dx, dy, area, margin = 8) {
+  function dimension(start, delta, min, cap, available) {
+    const max = Math.max(1, Math.min(cap, available));
+    return Math.min(max, Math.max(Math.min(min, max), Math.round(start + delta)));
+  }
+  return {
+    width: dimension(bounds.width, dx, PANEL_MIN.width, PANEL_MAX.width, area.x + area.width - bounds.x - margin),
+    height: dimension(bounds.height, dy, PANEL_MIN.height, PANEL_MAX.height, area.y + area.height - bounds.y - margin),
+  };
 }
 
 const DEFAULTS = Object.freeze({
@@ -28,7 +36,8 @@ const DEFAULTS = Object.freeze({
   timeoutSeconds: 90,
   keepOnTop: true,
   windowMode: 'floating', // 'floating' (borderless pet) | 'normal' (regular windows fallback)
-  mascotSize: MASCOT_SIZES[0],
+  panelWidth: 380,
+  panelHeight: 520,
   mascotX: null,
   mascotY: null,
 });
@@ -73,7 +82,8 @@ function coerce(key, v, d) {
     case 'apiBaseUrl': return (typeof v === 'string' && validateBaseUrl(v).url) || d;
     case 'timeoutSeconds': return typeof v === 'number' && v >= 1 && v <= 600 ? v : d;
     case 'windowMode': return v === 'floating' || v === 'normal' ? v : d;
-    case 'mascotSize': return MASCOT_SIZES.includes(v) ? v : d;
+    case 'panelWidth': return isInt(v) && v >= PANEL_MIN.width && v <= PANEL_MAX.width ? v : d;
+    case 'panelHeight': return isInt(v) && v >= PANEL_MIN.height && v <= PANEL_MAX.height ? v : d;
     case 'mascotX': case 'mascotY': return isInt(v) && v > -10000 && v < 20000 ? v : null;
     default: return d;
   }
@@ -237,6 +247,6 @@ function postCoach({ baseUrl, question, editor, version, timeoutMs = 90000 }) {
 
 module.exports = {
   DEFAULT_API_URL, COACH_PATH, MAX_QUESTION_CHARS, MAX_RESPONSE_BYTES, SUPPORTED_APPS, UPCOMING_APPS, DEFAULTS,
-  nextMascotSize, isLoopback, validateBaseUrl, urlWarning, loadConfig, saveConfig,
+  panelResize, isLoopback, validateBaseUrl, urlWarning, loadConfig, saveConfig,
   clampToArea, defaultMascotPosition, panelPosition, sanitizeText, postCoach,
 };

@@ -1,5 +1,5 @@
 body { overflow: hidden; }
-.panel { display: flex; flex-direction: column; height: 100vh; border: 1px solid var(--border); }
+.panel { position: relative; display: flex; flex-direction: column; height: 100vh; border: 1px solid var(--border); }
 header {
   display: flex; align-items: center; justify-content: space-between;
   padding: 8px 10px; border-bottom: 1px solid var(--border); background: var(--surface);
@@ -27,7 +27,14 @@ textarea {
   font: inherit; color: var(--text); background: var(--surface);
   border: 1px solid var(--border); border-radius: 8px; padding: 8px; resize: none; width: 100%;
 }
-.hint { grid-column: 1 / -1; margin: 0; }
+.hint { grid-column: 1 / -1; margin: 0; padding-right: 26px; }
+#resize {
+  position: absolute; bottom: 2px; right: 2px; width: 24px; height: 24px;
+  display: grid; place-items: center; padding: 0; border: 0; border-radius: 4px;
+  background: transparent; color: var(--muted); cursor: nwse-resize; touch-action: none;
+}
+#resize:hover, #resize:active { background: var(--user-bg); color: var(--text); }
+#resize svg { pointer-events: none; }
 @media (prefers-reduced-motion: reduce) {
   .status.busy::after { animation: none; content: "…"; }
 }

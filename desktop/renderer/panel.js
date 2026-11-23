@@ -62,6 +62,34 @@
     // Deliberately no input.focus() here: a reply must never pull focus back from your editor.
   }
 
+  const grip = document.getElementById('resize');
+  let resize = null;
+  grip.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || resize) return;
+    grip.setPointerCapture(e.pointerId);
+    resize = { id: e.pointerId, x: e.screenX, y: e.screenY };
+    api.resizePanel('start');
+  });
+  function moveGrip(e) {
+    if (resize?.id !== e.pointerId) return;
+    api.resizePanel('move', e.screenX - resize.x, e.screenY - resize.y);
+  }
+  function endGrip(e) {
+    if (resize?.id !== e.pointerId) return;
+    resize = null;
+    api.resizePanel('end');
+  }
+  grip.addEventListener('pointermove', moveGrip);
+  grip.addEventListener('pointerup', endGrip);
+  grip.addEventListener('pointercancel', endGrip);
+  grip.addEventListener('lostpointercapture', endGrip);
+  grip.addEventListener('keydown', (e) => {
+    const directions = { ArrowLeft: [-16, 0], ArrowRight: [16, 0], ArrowUp: [0, -16], ArrowDown: [0, 16] };
+    if (!Object.hasOwn(directions, e.key)) return;
+    e.preventDefault();
+    api.resizePanel('key', ...directions[e.key]);
+  });
+
   sendBtn.addEventListener('click', submit);
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); submit(); }
