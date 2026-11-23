@@ -28,9 +28,10 @@ npm start
 3. Ask **How do I make a camera shake?** The mock should echo the question and
    show **Editor: DaVinci Resolve**. It does not generate real instructions.
 4. Drag the pet to move it without scaling: when chat is open, it follows the pet
-   and keeps its size. Drag the **bottom-right corner of the chat window** outward
-   or inward to resize the chat. The chat remembers
-   its size. You can also focus the grip and use the arrow keys.
+   and **never changes size or grabs keyboard focus**. Drag the bottom-right
+   corner of the chat window only when you actually want to resize it. The chat remembers
+   its size. For a smaller, less intrusive chat, right-click the pet and choose
+   **Chat size → Compact**. Choose **Chat size → Default** to restore its original size.
 5. Try `/long` for scrolling, `/slow` for a delayed reply, and `/err` for retry.
    Stop the mock server with Ctrl+C when finished.
 
