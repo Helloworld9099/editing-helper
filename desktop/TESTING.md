@@ -51,6 +51,8 @@ Open any other app (a text editor, browser, your video editor, anything) and ver
 
 - [ ] Pet stays 80x80 while dragging, including over another app or across displays; position survives quit + relaunch.
 - [ ] With chat open, dragging the pet moves the chat alongside it without resizing either. Chat stays on screen and flips sides only when needed.
+- [ ] Drag the pet repeatedly left/right/up/down, including after resizing the chat manually: neither window grows. The editor keeps keyboard focus during pet dragging.
+- [ ] Right-click the pet > Reset chat size restores the original chat dimensions without moving the pet.
 - [ ] Click the other app while the panel is open: panel stays visible, the other app keeps keyboard focus.
 - [ ] Send a question, immediately click the other app and keep typing there. When the reply lands, your typing
       is not interrupted (a yellow dot may appear on the pet if the panel was collapsed).

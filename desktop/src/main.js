@@ -25,6 +25,7 @@ let quitting = false;
 let drag = null, panelDrag = null;
 let panelSide = null;
 let hideTimer = null, moveTimer = null;
+const PANEL_MARGIN = 8;
 
 const alive = (w) => w && !w.isDestroyed();
 const prefs = () => ({
@@ -101,12 +102,22 @@ function hideForNow() {
   hideTimer = setTimeout(showMascot, HIDE_MS);
 }
 
+// Recover a useful chat size without hunting for the tiny resize grip.
+function resetChatSize() {
+  cfg.panelWidth = core.DEFAULTS.panelWidth;
+  cfg.panelHeight = core.DEFAULTS.panelHeight;
+  panelDrag = null;
+  persist();
+  if (alive(panel) && alive(mascot)) placePanel();
+}
+
 function reclampMascot() {
   if (!alive(mascot) || normal) return;
   const [x, y] = mascot.getPosition();
   const [width, height] = mascot.getSize();
   const c = clampMascot(x, y, width, height);
   if (c.x !== x || c.y !== y) { mascot.setPosition(c.x, c.y); savePosition(); }
+  if (panelVisible()) placePanel(true);
 }
 
 // ------------------------------------------------------------- panel
@@ -130,14 +141,25 @@ function createPanel() {
   });
 }
 
+// The saved panel size is authoritative. Reading getSize() on every move lets a
+// compositor-induced resize become the new baseline, making the chat grow on
+// each drag event (as observed on Ubuntu/XWayland). Keep a single fixed geometry.
 function placePanel(followingDrag = false) {
   if (!alive(panel) || !alive(mascot)) return;
   const m = mascot.getBounds();
-  const [width, height] = panel.getSize();
   const area = screen.getDisplayMatching(m).workArea;
-  const { x, y, side } = core.panelPosition(m, { width, height }, area, 8, 8, followingDrag ? panelSide : null);
+  const width = Math.max(1, Math.min(cfg.panelWidth, area.width - PANEL_MARGIN * 2));
+  const height = Math.max(1, Math.min(cfg.panelHeight, area.height - PANEL_MARGIN * 2));
+  const { x, y, side } = core.panelPosition(
+    m, { width, height }, area, 8, PANEL_MARGIN, followingDrag ? panelSide : null
+  );
   panelSide = side;
-  panel.setPosition(x, y);
+  const current = panel.getBounds();
+  if (current.x !== x || current.y !== y || current.width !== width || current.height !== height) {
+    // Move and size in one call instead of setPosition(). Some Linux window
+    // managers modify the window geometry during repeated position updates.
+    panel.setBounds({ x, y, width, height });
+  }
 }
 
 function openPanel() {
@@ -176,7 +198,7 @@ function resizePanelFrom(bounds, dx, dy) {
   const size = core.panelResize(bounds, dx, dy, area);
   const [width, height] = panel.getSize();
   if (width === size.width && height === size.height) return false;
-  panel.setBounds(size);
+  panel.setBounds({ x: bounds.x, y: bounds.y, ...size });
   return true;
 }
 
@@ -295,7 +317,11 @@ function registerIpc() {
   });
   ipcMain.on('mascot:drag-end', (e, moved) => {
     if (!isFrom(e, mascot)) return;
-    if (drag && moved === true) savePosition();
+    if (drag && moved === true) {
+      // Repair any late compositor geometry change before releasing drag.
+      if (panelVisible()) placePanel(true);
+      savePosition();
+    }
     drag = null;
   });
   ipcMain.on('mascot:menu', (e) => {
@@ -303,6 +329,7 @@ function registerIpc() {
     Menu.buildFromTemplate([
       { label: 'Ask a question', click: openPanel },
       { label: 'Settings…', click: () => openSettings('settings') },
+      { label: 'Reset chat size', click: resetChatSize },
       { label: 'Hide for 10 minutes', click: hideForNow },
       { type: 'separator' },
       { label: 'Quit Editing Coach', click: quitApp },
