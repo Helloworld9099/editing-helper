@@ -60,8 +60,11 @@ test('pet remains 80px and the open chat follows during drag without resizing', 
   const display = { workArea: { x: 0, y: 0, width: 1920, height: 1200 } };
   let point = { x: 930, y: 430 };
   Object.assign(screen, { getDisplayMatching: () => display, getPrimaryDisplay: () => display, getCursorScreenPoint: () => point });
-  const electron = { app, ipcMain: ipc, BrowserWindow: Win, screen, Menu: { setApplicationMenu() {} },
-    session: { defaultSession: { setPermissionRequestHandler() {} } } };
+  let contextMenu;
+  const electron = { app, ipcMain: ipc, BrowserWindow: Win, screen, Menu: {
+    setApplicationMenu() {},
+    buildFromTemplate(items) { contextMenu = items; return { popup() {} }; },
+  }, session: { defaultSession: { setPermissionRequestHandler() {} } } };
   const file = path.join(__dirname, '../src/main.js');
   vm.runInNewContext(fs.readFileSync(file, 'utf8'), { __dirname: path.dirname(file), process,
     require: (id) => id === 'electron' ? electron : id === './core' ? core : require(id) });
@@ -119,4 +122,13 @@ test('pet remains 80px and the open chat follows during drag without resizing', 
   // Repositioning never persists a larger size in the config file.
   const saved = core.loadConfig(path.join(dir, 'config.json'));
   assert.deepEqual([saved.panelWidth, saved.panelHeight], [430, 560]);
+  emit(pet, 'mascot:menu');
+  const sizes = contextMenu.find((item) => item.label === 'Chat size').submenu;
+  sizes.find((item) => item.label.startsWith('Compact')).click();
+  assert.deepEqual(chat.getSize(), [320, 400]);
+  assert.deepEqual(core.loadConfig(path.join(dir, 'config.json')).panelWidth, 320);
+  sizes.find((item) => item.label.startsWith('Default')).click();
+  assert.deepEqual(chat.getSize(), [380, 520]);
+  assert.deepEqual(pet.getSize(), petSize);
+  assert.equal(chat.focusCalls, focusOnOpen, 'size presets must not steal focus');
 });
