@@ -1,0 +1,16 @@
+body { background: var(--surface); }
+form { padding: 22px 24px; }
+h1 { margin: 0 0 6px; font-size: 20px; }
+.intro { margin: 0 0 14px; }
+label { display: block; font-weight: 600; margin: 14px 0 4px; }
+label.check { font-weight: 400; display: flex; gap: 8px; align-items: flex-start; margin: 12px 0 0; }
+label.check input { margin-top: 4px; }
+select, input[type="text"] {
+  width: 100%; font: inherit; padding: 8px; color: var(--text); background: var(--surface);
+  border: 1px solid var(--border); border-radius: 6px;
+}
+p { margin: 6px 0 0; }
+.error { color: var(--error); min-height: 20px; margin-top: 12px; font-size: 14px; }
+.warn:empty, .error:empty { display: none; }
+.buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+body[data-mode="setup"] .settings-only { display: none; }

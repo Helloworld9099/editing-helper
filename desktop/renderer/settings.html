@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:">
+  <title>Editing Coach</title>
+  <link rel="stylesheet" href="shared.css">
+  <link rel="stylesheet" href="settings.css">
+</head>
+<body data-mode="settings">
+  <form id="form" novalidate>
+    <h1 id="title">Settings</h1>
+    <p id="intro" class="intro">Editing Coach floats above whatever app you're using. It doesn't read or control any other app.</p>
+
+    <label for="editor">What video editor do you use?</label>
+    <select id="editor" required aria-describedby="editorHint">
+      <option value="" disabled selected>Choose your video editor</option>
+    </select>
+    <p id="editorHint" class="muted">Only DaVinci Resolve is supported right now.</p>
+
+    <label for="version">Version <span class="muted">(optional)</span></label>
+    <input id="version" type="text" maxlength="40" autocomplete="off" placeholder="e.g. 20.1">
+    <p class="muted">Your editor and optional version are sent with each question. Answers are not yet checked against sources.</p>
+
+    <div class="settings-only">
+      <label for="url">Server address</label>
+      <input id="url" type="text" autocomplete="off" spellcheck="false">
+      <p id="urlWarn" class="muted warn"></p>
+
+      <label class="check"><input id="onTop" type="checkbox"> Keep the pet and panel above other windows</label>
+      <label class="check"><input id="normalMode" type="checkbox"> Normal window mode (use this if the floating pet misbehaves; needs a restart)</label>
+    </div>
+
+    <p id="error" class="error" role="alert"></p>
+    <p id="info" class="muted" role="status"></p>
+    <div class="buttons">
+      <button id="cancel" class="ghost settings-only" type="button">Cancel</button>
+      <button id="save" class="primary" type="submit">Save</button>
+    </div>
+  </form>
+  <script src="settings.js"></script>
+</body>
+</html>

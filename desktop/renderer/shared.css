@@ -1,0 +1,34 @@
+:root {
+  --bg: #f7f9fb;
+  --surface: #ffffff;
+  --text: #1a1a1a;
+  --muted: #52606d;
+  --border: #c5ced6;
+  --accent: #0b6e8a;
+  --accent-text: #ffffff;
+  --error: #9b1c1c;
+  --error-bg: #fdecec;
+  --user-bg: #e8f0fe;
+  --coach-bg: #eef6f1;
+  --focus: #0b4f8a;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  font: 15px/1.45 system-ui, "Ubuntu", "Segoe UI", sans-serif;
+  color: var(--text);
+  background: var(--bg);
+}
+button { font: inherit; cursor: pointer; }
+button.primary {
+  background: var(--accent); color: var(--accent-text);
+  border: 1px solid var(--accent); border-radius: 6px; padding: 8px 16px; font-weight: 600;
+}
+button.primary:disabled { opacity: .55; cursor: not-allowed; }
+button.ghost {
+  background: transparent; color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px; padding: 5px 10px; font-size: 13px;
+}
+button.ghost:hover { background: #e9eef2; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.muted { color: var(--muted); font-size: 13px; }

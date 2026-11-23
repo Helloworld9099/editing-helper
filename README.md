@@ -1,5 +1,7 @@
 # Editing Helper
 
+**Desktop app:** See [desktop/README.md](desktop/README.md) to launch the floating frontend and test it without a model.
+
 Local API for the Editing Helper desktop companion. The frontend is developed separately. This version returns raw Qwen answers; it does not claim to provide verified editing instructions.
 
 ## Start on Ubuntu

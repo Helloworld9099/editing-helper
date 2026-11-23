@@ -1,0 +1,290 @@
+'use strict';
+const { app, BrowserWindow, Menu, ipcMain, screen, session } = require('electron');
+const path = require('node:path');
+const core = require('./core');
+
+// Ubuntu defaults to Wayland, where apps cannot position their own windows or reliably stay
+// on top. Running through XWayland (X11) makes dragging and always-on-top work. Set
+// EDITING_COACH_NATIVE_WAYLAND=1 to opt out.
+if (process.platform === 'linux' && !process.env.EDITING_COACH_NATIVE_WAYLAND) {
+  app.commandLine.appendSwitch('ozone-platform', 'x11');
+}
+app.setPath('userData', path.join(app.getPath('appData'), 'editing-coach'));
+
+const MASCOT_SIZE = 96;
+const PANEL_SIZE = { width: 380, height: 520 };
+const HIDE_MS = 10 * 60 * 1000;
+const forceNormal = process.argv.includes('--normal-window');
+const RENDERER = path.join(__dirname, '..', 'renderer');
+
+let cfgFile;
+let cfg = { ...core.DEFAULTS };
+let normal = false;            // regular framed windows instead of the borderless pet
+let mascot = null, panel = null, settingsWin = null;
+let busy = false;
+let quitting = false;
+let drag = null;
+let hideTimer = null, moveTimer = null;
+
+const alive = (w) => w && !w.isDestroyed();
+const prefs = () => ({
+  preload: path.join(__dirname, 'preload.js'),
+  contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true, spellcheck: false,
+});
+const persist = () => {
+  try { core.saveConfig(cfg, cfgFile); } catch (e) { console.error('Could not save settings:', e.message); }
+};
+const isFrom = (e, w) => alive(w) && e.sender === w.webContents;
+const isOurs = (e) => isFrom(e, mascot) || isFrom(e, panel) || isFrom(e, settingsWin);
+const publicConfig = () => ({ ...cfg, normal, supportedApps: core.SUPPORTED_APPS, upcomingApps: core.UPCOMING_APPS });
+
+// ------------------------------------------------------------ mascot
+function clampMascot(x, y) {
+  const area = screen.getDisplayMatching({ x, y, width: MASCOT_SIZE, height: MASCOT_SIZE }).workArea;
+  return core.clampToArea(x, y, MASCOT_SIZE, MASCOT_SIZE, area, 8);
+}
+
+function createMascot() {
+  const pos = cfg.mascotX == null || cfg.mascotY == null
+    ? core.defaultMascotPosition(MASCOT_SIZE, screen.getPrimaryDisplay().workArea)
+    : clampMascot(cfg.mascotX, cfg.mascotY);
+
+  mascot = new BrowserWindow({
+    x: pos.x, y: pos.y, width: MASCOT_SIZE, height: MASCOT_SIZE, useContentSize: true,
+    title: 'Editing Coach',
+    frame: normal, transparent: !normal, hasShadow: false,
+    backgroundColor: normal ? '#1f3a4d' : '#00000000',
+    resizable: false, maximizable: false, fullscreenable: false, minimizable: normal,
+    skipTaskbar: !normal,
+    focusable: normal,           // floating pet never takes keyboard focus from whatever app you're in
+    alwaysOnTop: cfg.keepOnTop,
+    show: false,
+    webPreferences: prefs(),
+  });
+  if (cfg.keepOnTop) mascot.setAlwaysOnTop(true, 'floating');
+  if (!normal) { try { mascot.setVisibleOnAllWorkspaces(true); } catch { /* unsupported */ } }
+  mascot.loadFile(path.join(RENDERER, 'mascot.html'));
+  mascot.once('ready-to-show', () => mascot.showInactive());
+
+  if (normal) {
+    mascot.on('close', () => quitApp());   // closing the only visible window = quit
+    mascot.on('move', () => {              // the window manager drags it; remember where it landed
+      placePanel();
+      clearTimeout(moveTimer);
+      moveTimer = setTimeout(savePosition, 600);
+    });
+  }
+}
+
+function savePosition() {
+  if (!alive(mascot)) return;
+  const [x, y] = mascot.getPosition();
+  cfg.mascotX = x; cfg.mascotY = y;
+  persist();
+}
+
+function showMascot() {
+  clearTimeout(hideTimer); hideTimer = null;
+  if (alive(mascot)) {
+    mascot.showInactive();
+    if (cfg.keepOnTop) mascot.setAlwaysOnTop(true, 'floating');
+  } else if (alive(settingsWin)) {
+    settingsWin.show(); settingsWin.focus();
+  }
+}
+
+function hideForNow() {
+  closePanel();
+  if (alive(mascot)) mascot.hide();
+  clearTimeout(hideTimer);
+  hideTimer = setTimeout(showMascot, HIDE_MS);
+}
+
+function reclampMascot() {
+  if (!alive(mascot) || normal) return;
+  const [x, y] = mascot.getPosition();
+  const c = clampMascot(x, y);
+  if (c.x !== x || c.y !== y) { mascot.setPosition(c.x, c.y); savePosition(); placePanel(); }
+}
+
+// ------------------------------------------------------------- panel
+function createPanel() {
+  panel = new BrowserWindow({
+    ...PANEL_SIZE, useContentSize: true, show: false,
+    title: 'Editing Coach',
+    frame: normal, resizable: false, maximizable: false, fullscreenable: false, minimizable: normal,
+    skipTaskbar: !normal,
+    alwaysOnTop: cfg.keepOnTop,
+    backgroundColor: '#f7f9fb',
+    webPreferences: prefs(),
+  });
+  panel.loadFile(path.join(RENDERER, 'panel.html'));
+  panel.on('close', (e) => {            // Alt+F4 / window close = collapse, not quit
+    if (!quitting) { e.preventDefault(); closePanel(); }
+  });
+}
+
+function placePanel() {
+  if (!alive(panel) || !alive(mascot)) return;
+  const m = mascot.getBounds();
+  const [width, height] = panel.getSize();
+  const area = screen.getDisplayMatching(m).workArea;
+  const { x, y } = core.panelPosition(m, { width, height }, area);
+  panel.setPosition(x, y);
+}
+
+function openPanel() {
+  if (!alive(mascot)) return;
+  if (!alive(panel)) createPanel();
+  placePanel();
+  panel.show();                          // user-initiated, so taking focus here is expected
+  panel.focus();
+  if (cfg.keepOnTop) panel.setAlwaysOnTop(true, 'floating');
+  panel.webContents.send('panel:shown');
+  mascot.webContents.send('mascot:badge', false);
+}
+
+function closePanel() {
+  if (alive(panel)) panel.hide();
+}
+
+const panelVisible = () => alive(panel) && panel.isVisible();
+
+// ---------------------------------------------------------- settings
+function openSettings(mode = 'settings') {
+  if (alive(settingsWin)) { settingsWin.show(); settingsWin.focus(); return; }
+  const isSetup = mode === 'setup';
+  settingsWin = new BrowserWindow({
+    width: 460, height: isSetup ? 380 : 560, useContentSize: true,
+    title: isSetup ? 'Editing Coach: setup' : 'Editing Coach: settings',
+    resizable: false, maximizable: false, minimizable: false, fullscreenable: false,
+    autoHideMenuBar: true, backgroundColor: '#ffffff',
+    alwaysOnTop: cfg.keepOnTop && !isSetup,
+    webPreferences: prefs(),
+  });
+  settingsWin.loadFile(path.join(RENDERER, 'settings.html'), { query: { mode } });
+  settingsWin.on('closed', () => {
+    settingsWin = null;
+    if (!cfg.setupDone) quitApp();       // closing setup without finishing quits
+  });
+}
+
+// -------------------------------------------------------------- IPC
+function registerIpc() {
+  ipcMain.handle('config:get', (e) => (isOurs(e) ? publicConfig() : null));
+
+  ipcMain.handle('config:save', (e, input) => {
+    if (!isFrom(e, settingsWin)) return { ok: false, errors: { form: 'Not allowed.' } };
+    input = input || {};
+    const errors = {};
+    const { url, error } = core.validateBaseUrl(input.apiBaseUrl ?? cfg.apiBaseUrl);
+    if (error) errors.apiBaseUrl = error;
+    if (!core.SUPPORTED_APPS.includes(input.editor)) errors.editor = 'Choose a supported video editor.';
+    if (Object.keys(errors).length) return { ok: false, errors };
+
+    const windowMode = input.windowMode === 'normal' ? 'normal' : input.windowMode === 'floating' ? 'floating' : cfg.windowMode;
+    const wasSetup = !cfg.setupDone;
+    const restartNeeded = !wasSetup && windowMode !== cfg.windowMode;
+    Object.assign(cfg, {
+      editor: input.editor,
+      editorVersion: core.sanitizeText(String(input.editorVersion ?? '')).trim().slice(0, 40),
+      apiBaseUrl: url,
+      keepOnTop: typeof input.keepOnTop === 'boolean' ? input.keepOnTop : cfg.keepOnTop,
+      windowMode,
+    });
+    if (wasSetup && input.finishSetup === true) {
+      cfg.setupDone = true;
+      normal = forceNormal || cfg.windowMode === 'normal';
+    }
+    persist();
+    for (const w of [mascot, panel]) if (alive(w)) w.setAlwaysOnTop(cfg.keepOnTop, 'floating');
+    if (wasSetup && cfg.setupDone) { createMascot(); createPanel(); }   // before setup window closes
+    return { ok: true, restartNeeded };
+  });
+
+  ipcMain.handle('coach:ask', async (e, question) => {
+    if (!isFrom(e, panel)) return { ok: false, kind: 'unexpected', message: 'Not allowed.' };
+    if (busy) return { ok: false, kind: 'busy', message: 'Still working on your last question.' };
+    busy = true;
+    if (alive(mascot)) mascot.webContents.send('mascot:busy', true);
+    let result;
+    try {
+      result = await core.postCoach({ baseUrl: cfg.apiBaseUrl, question, editor: cfg.editor, version: cfg.editorVersion, timeoutMs: cfg.timeoutSeconds * 1000 });
+    } catch {
+      result = { ok: false, kind: 'unexpected', message: 'Unexpected problem while contacting the server.' };
+    } finally {
+      busy = false;
+      if (alive(mascot)) mascot.webContents.send('mascot:busy', false);
+    }
+    // A reply never raises or focuses a window; if the panel is collapsed it just lights a dot.
+    if (result.ok && !panelVisible() && alive(mascot)) mascot.webContents.send('mascot:badge', true);
+    return result;
+  });
+
+  ipcMain.on('panel:close', (e) => { if (isFrom(e, panel)) closePanel(); });
+  ipcMain.on('app:open-settings', (e) => { if (isOurs(e)) openSettings('settings'); });
+  ipcMain.on('app:quit', (e) => { if (isOurs(e)) quitApp(); });
+
+  // Mascot: click toggles the panel; dragging moves the window (cursor position is read here,
+  // in the same coordinate space as the window, so it behaves on scaled displays too).
+  ipcMain.on('mascot:click', (e) => { if (isFrom(e, mascot)) (panelVisible() ? closePanel() : openPanel()); });
+  ipcMain.on('mascot:drag-start', (e) => {
+    if (!isFrom(e, mascot) || normal) return;
+    const c = screen.getCursorScreenPoint();
+    const [wx, wy] = mascot.getPosition();
+    drag = { cx: c.x, cy: c.y, wx, wy };
+  });
+  ipcMain.on('mascot:drag-move', (e) => {
+    if (!isFrom(e, mascot) || !drag) return;
+    const c = screen.getCursorScreenPoint();
+    const p = clampMascot(drag.wx + (c.x - drag.cx), drag.wy + (c.y - drag.cy));
+    mascot.setPosition(p.x, p.y);
+    placePanel();
+  });
+  ipcMain.on('mascot:drag-end', (e) => {
+    if (!isFrom(e, mascot)) return;
+    if (drag) savePosition();
+    drag = null;
+  });
+  ipcMain.on('mascot:menu', (e) => {
+    if (!isFrom(e, mascot)) return;
+    Menu.buildFromTemplate([
+      { label: 'Ask a question', click: openPanel },
+      { label: 'Settings…', click: () => openSettings('settings') },
+      { label: 'Hide for 10 minutes', click: hideForNow },
+      { type: 'separator' },
+      { label: 'Quit Editing Coach', click: quitApp },
+    ]).popup({ window: mascot });
+  });
+}
+
+function quitApp() {
+  quitting = true;
+  app.quit();
+}
+
+// --------------------------------------------------------- lifecycle
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', showMascot);          // launching again brings a hidden pet back
+  app.on('before-quit', () => { quitting = true; savePosition(); });
+  app.on('window-all-closed', () => app.quit());
+
+  app.on('web-contents-created', (_e, wc) => {     // the UI can't open windows or navigate away
+    wc.setWindowOpenHandler(() => ({ action: 'deny' }));
+    wc.on('will-navigate', (ev) => ev.preventDefault());
+  });
+
+  app.whenReady().then(() => {
+    session.defaultSession.setPermissionRequestHandler((_wc, _perm, cb) => cb(false));
+    Menu.setApplicationMenu(null);
+    cfgFile = path.join(app.getPath('userData'), 'config.json');
+    cfg = core.loadConfig(cfgFile);
+    normal = forceNormal || cfg.windowMode === 'normal';
+    registerIpc();
+    screen.on('display-removed', reclampMascot);
+    screen.on('display-metrics-changed', reclampMascot);
+    if (cfg.setupDone) { createMascot(); createPanel(); } else { openSettings('setup'); }
+  });
+}

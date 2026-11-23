@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:">
+  <title>Editing Coach</title>
+  <link rel="stylesheet" href="shared.css">
+  <link rel="stylesheet" href="panel.css">
+</head>
+<body>
+  <div class="panel">
+    <header>
+      <h1>Editing Coach</h1>
+      <div class="actions">
+        <button id="settings" class="ghost" type="button">Settings</button>
+        <button id="collapse" class="ghost" type="button" aria-label="Collapse panel (Escape)">Collapse</button>
+      </div>
+    </header>
+    <main id="log" role="log" aria-live="polite" aria-label="Conversation" tabindex="0"></main>
+    <div id="status" class="status" role="status"></div>
+    <footer>
+      <textarea id="input" rows="3" maxlength="1000" placeholder="Ask an editing question…" aria-label="Your question"></textarea>
+      <button id="send" class="primary" type="button">Send</button>
+      <p class="hint muted">Enter sends · Shift+Enter new line · Esc collapses</p>
+    </footer>
+  </div>
+  <script src="panel.js"></script>
+</body>
+</html>

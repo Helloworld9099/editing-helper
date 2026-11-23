@@ -1,0 +1,18 @@
+{
+  "name": "editing-coach",
+  "productName": "Editing Coach",
+  "version": "0.1.0",
+  "description": "Floating desktop companion: an always-on-top pet that asks the Editing Coach FastAPI backend a question. Not tied to any one editing app.",
+  "main": "src/main.js",
+  "private": true,
+  "license": "UNLICENSED",
+  "scripts": {
+    "start": "electron .",
+    "start:normal": "electron . --normal-window",
+    "test": "node --test",
+    "mock": "node tools/mock-backend.js"
+  },
+  "devDependencies": {
+    "electron": "45.4.1"
+  }
+}

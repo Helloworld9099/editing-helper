@@ -1,0 +1,14 @@
+html, body { background: transparent; overflow: hidden; user-select: none; -webkit-user-select: none; }
+body { display: grid; place-items: center; }
+#pet { width: 96px; height: 96px; cursor: grab; touch-action: none; border-radius: 50%; }
+#pet.dragging { cursor: grabbing; }
+#pet svg { display: block; pointer-events: none; transition: transform .15s ease; }
+#pet:hover svg { transform: scale(1.04); }
+.badge { display: none; }
+#pet.badge-on .badge { display: block; }
+#pet.busy .eyes { animation: glance .9s ease-in-out infinite alternate; }
+@keyframes glance { from { transform: translateX(-2.5px); } to { transform: translateX(2.5px); } }
+@media (prefers-reduced-motion: reduce) {
+  #pet svg { transition: none; }
+  #pet.busy .eyes { animation: none; }
+}
