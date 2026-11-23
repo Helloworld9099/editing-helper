@@ -77,7 +77,8 @@ with sync_playwright() as pw:
           p.locator("#log img").count() == 0 and p.evaluate("window.__pwned") is None and "<img src=x" in p.inner_text("#log"))
     check("panel: newlines preserved", p.evaluate("getComputedStyle(document.querySelector('.msg.coach .body')).whiteSpace") == "pre-wrap")
     check("panel: reply does not steal focus", p.evaluate("document.activeElement.id") != "input")
-    check("panel: blank Send stays disabled, waiting cleared", p.is_disabled("#send") and p.inner_text("#status") == "")
+    check("panel: draft typed during wait is preserved and Send re-enabled",
+          not p.is_disabled("#send") and p.input_value("#input") == "second question" and p.inner_text("#status") == "")
     p.fill("#input", "line1"); p.press("#input", "Shift+Enter")
     check("panel: Shift+Enter makes a newline, doesn't send", "\n" in p.input_value("#input") and names(p).count("ask") == 1)
     p.fill("#input", "next"); p.press("#input", "Enter")
