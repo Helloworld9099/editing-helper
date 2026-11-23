@@ -27,7 +27,7 @@ STUB = """
     openSettings: () => calls.push(['openSettings']),
     quit: () => calls.push(['quit']),
     mascot: { dragStart: () => calls.push(['dragStart']), dragMove: () => calls.push(['dragMove']),
-              dragEnd: () => calls.push(['dragEnd']), click: () => calls.push(['click']), menu: () => calls.push(['menu']) },
+              dragEnd: (moved) => calls.push(['dragEnd', moved]), zoom: () => calls.push(['zoom']), click: () => calls.push(['click']), menu: () => calls.push(['menu']) },
     on: (ch, cb) => { (listeners[ch] = listeners[ch] || []).push(cb); return () => {}; },
   };
 })();
@@ -100,11 +100,11 @@ with sync_playwright() as pw:
     check("mascot: loads with no console/CSP errors", not errs, errs)
     p.mouse.move(48, 48); p.mouse.down(); p.mouse.up()
     n = names(p)
-    check("mascot: plain click -> click only (no drag)", "click" in n and "dragMove" not in n and "dragEnd" not in n, n)
+    check("mascot: plain click -> click only (no drag)", "click" in n and "dragMove" not in n and ["dragEnd", False] in p.evaluate("window.__calls"), n)
     p.evaluate("window.__calls.length = 0")
     p.mouse.move(48, 48); p.mouse.down(); p.mouse.move(70, 60, steps=6); p.mouse.up()
     n = names(p)
-    check("mascot: drag -> dragStart/dragMove/dragEnd and NO click", n[0] == "dragStart" and "dragMove" in n and n[-1] == "dragEnd" and "click" not in n, n)
+    check("mascot: drag -> dragStart/dragMove/dragEnd and NO click", n[0] == "dragStart" and "dragMove" in n and n[-1] == "dragEnd" and "click" not in n and "zoom" not in n, n)
     p.evaluate("window.__calls.length = 0")
     p.mouse.move(48, 48); p.mouse.down(); p.mouse.move(51, 49); p.mouse.up()
     check("mascot: tiny jitter (<5px) still counts as a click", "click" in names(p) and "dragMove" not in names(p))
@@ -118,6 +118,10 @@ with sync_playwright() as pw:
     check("mascot: classes clear", p.evaluate("document.getElementById('pet').className") == "")
     p.evaluate("window.__calls.length = 0"); p.focus("#pet"); p.keyboard.press("Enter")
     check("mascot: keyboard Enter opens panel (accessibility)", names(p) == ["click"])
+    check("mascot: hovering does not scale the artwork", p.locator("#pet svg").evaluate("(svg) => getComputedStyle(svg).transform") == "none")
+    p.evaluate("window.__calls.length = 0")
+    p.click("#zoom")
+    check("mascot: zoom button sends only zoom, not move or panel click", names(p) == ["zoom"], names(p))
     p.screenshot(path=str(OUT / "mascot.png"), omit_background=True)
 
     p, _ = open_page("mascot.html", cfg={"normal": True, "windowMode": "normal"}, size=(96, 96))

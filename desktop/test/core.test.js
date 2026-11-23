@@ -200,3 +200,17 @@ test('client sends the selected editor and optional version; rejects unsupported
     assert.equal((await core.postCoach({ baseUrl: s.url, question: 'How?', editor: 'Shotcut' })).kind, 'config');
   });
 });
+
+test('mascot zoom cycles through fixed levels and persists separately from drag position', () => {
+  let size = core.DEFAULTS.mascotSize;
+  assert.equal(size, 96);
+  for (const next of [120, 144, 96]) {
+    size = core.nextMascotSize(size);
+    assert.equal(size, next);
+  }
+  const f = tmpFile();
+  core.saveConfig({ ...core.DEFAULTS, mascotSize: 144, mascotX: 22, mascotY: 23 }, f);
+  assert.equal(core.loadConfig(f).mascotSize, 144);
+  fs.writeFileSync(f, JSON.stringify({ mascotSize: 9999 }));
+  assert.equal(core.loadConfig(f).mascotSize, 96);
+});

@@ -14,6 +14,12 @@ const MAX_QUESTION_CHARS = 1000; // matches /v1/coach
 const SUPPORTED_APPS = Object.freeze(['DaVinci Resolve']);
 const UPCOMING_APPS = Object.freeze(['Kdenlive', 'Adobe Premiere Pro', 'Final Cut Pro', 'CapCut', 'Shotcut', 'OpenShot']);
 
+const MASCOT_SIZES = Object.freeze([96, 120, 144]);
+
+function nextMascotSize(size) {
+  return MASCOT_SIZES[(MASCOT_SIZES.indexOf(size) + 1) % MASCOT_SIZES.length];
+}
+
 const DEFAULTS = Object.freeze({
   setupDone: false,
   editor: '',
@@ -22,6 +28,7 @@ const DEFAULTS = Object.freeze({
   timeoutSeconds: 90,
   keepOnTop: true,
   windowMode: 'floating', // 'floating' (borderless pet) | 'normal' (regular windows fallback)
+  mascotSize: MASCOT_SIZES[0],
   mascotX: null,
   mascotY: null,
 });
@@ -66,6 +73,7 @@ function coerce(key, v, d) {
     case 'apiBaseUrl': return (typeof v === 'string' && validateBaseUrl(v).url) || d;
     case 'timeoutSeconds': return typeof v === 'number' && v >= 1 && v <= 600 ? v : d;
     case 'windowMode': return v === 'floating' || v === 'normal' ? v : d;
+    case 'mascotSize': return MASCOT_SIZES.includes(v) ? v : d;
     case 'mascotX': case 'mascotY': return isInt(v) && v > -10000 && v < 20000 ? v : null;
     default: return d;
   }
@@ -229,6 +237,6 @@ function postCoach({ baseUrl, question, editor, version, timeoutMs = 90000 }) {
 
 module.exports = {
   DEFAULT_API_URL, COACH_PATH, MAX_QUESTION_CHARS, MAX_RESPONSE_BYTES, SUPPORTED_APPS, UPCOMING_APPS, DEFAULTS,
-  isLoopback, validateBaseUrl, urlWarning, loadConfig, saveConfig,
+  nextMascotSize, isLoopback, validateBaseUrl, urlWarning, loadConfig, saveConfig,
   clampToArea, defaultMascotPosition, panelPosition, sanitizeText, postCoach,
 };

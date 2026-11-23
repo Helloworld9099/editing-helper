@@ -14,7 +14,8 @@ contextBridge.exposeInMainWorld('coach', {
   mascot: {
     dragStart: () => ipcRenderer.send('mascot:drag-start'),
     dragMove: () => ipcRenderer.send('mascot:drag-move'),
-    dragEnd: () => ipcRenderer.send('mascot:drag-end'),
+    dragEnd: (moved) => ipcRenderer.send('mascot:drag-end', moved === true),
+    zoom: () => ipcRenderer.send('mascot:zoom'),
     click: () => ipcRenderer.send('mascot:click'),
     menu: () => ipcRenderer.send('mascot:menu'),
   },

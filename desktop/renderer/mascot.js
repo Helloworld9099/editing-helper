@@ -2,6 +2,7 @@
   'use strict';
   const pet = document.getElementById('pet');
   const api = window.coach;
+  document.getElementById('zoom').addEventListener('click', () => api.mascot.zoom());
   const cfg = await api.getConfig();
   const canDrag = !(cfg && cfg.normal);   // in normal-window mode the window manager moves it
   const THRESHOLD = 5;
@@ -10,14 +11,15 @@
 
   pet.addEventListener('pointerdown', (e) => {
     if (e.button !== 0) return;
-    start = { x: e.screenX, y: e.screenY };
+    if (start) return;
+    start = { x: e.screenX, y: e.screenY, id: e.pointerId };
     moved = dragging = false;
     pet.setPointerCapture(e.pointerId);
     if (canDrag) api.mascot.dragStart();
   });
 
   pet.addEventListener('pointermove', (e) => {
-    if (!start) return;
+    if (!start || start.id !== e.pointerId) return;
     if (!moved && Math.hypot(e.screenX - start.x, e.screenY - start.y) < THRESHOLD) return;
     moved = true;
     if (!canDrag) return;
@@ -27,16 +29,17 @@
   });
 
   function finish(e, cancelled) {
-    if (!start) return;
+    if (!start || start.id !== e.pointerId) return;
     const wasDragging = dragging, wasMoved = moved;
     start = null; moved = dragging = false;
     pet.classList.remove('dragging');
     try { pet.releasePointerCapture(e.pointerId); } catch { /* already released */ }
-    if (wasDragging) api.mascot.dragEnd();      // drag: keep position, don't open the panel
-    else if (!wasMoved && !cancelled) api.mascot.click();   // plain click: toggle the panel
+    if (canDrag) api.mascot.dragEnd(wasDragging); // clear pending move on clicks and cancellations too
+    if (!wasMoved && !cancelled) api.mascot.click();   // plain click: toggle the panel
   }
   pet.addEventListener('pointerup', (e) => finish(e, false));
   pet.addEventListener('pointercancel', (e) => finish(e, true));
+  pet.addEventListener('lostpointercapture', (e) => finish(e, true));
 
   pet.addEventListener('contextmenu', (e) => { e.preventDefault(); api.mascot.menu(); });
   pet.addEventListener('keydown', (e) => {

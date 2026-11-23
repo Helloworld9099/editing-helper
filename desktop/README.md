@@ -27,7 +27,9 @@ npm start
    `http://127.0.0.1:8001`. Save.
 3. Ask **How do I make a camera shake?** The mock should echo the question and
    show **Editor: DaVinci Resolve**. It does not generate real instructions.
-4. Try `/long` for scrolling, `/slow` for a delayed reply, and `/err` for retry.
+4. Drag the pet to move it without scaling. Click its bottom-right resize button
+   to cycle through 100%, 125%, and 150%.
+5. Try `/long` for scrolling, `/slow` for a delayed reply, and `/err` for retry.
    Stop the mock server with Ctrl+C when finished.
 
 Try `npm run start:normal` if the floating overlay doesn't behave on your

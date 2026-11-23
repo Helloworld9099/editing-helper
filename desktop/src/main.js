@@ -11,7 +11,6 @@ if (process.platform === 'linux' && !process.env.EDITING_COACH_NATIVE_WAYLAND) {
 }
 app.setPath('userData', path.join(app.getPath('appData'), 'editing-coach'));
 
-const MASCOT_SIZE = 96;
 const PANEL_SIZE = { width: 380, height: 520 };
 const HIDE_MS = 10 * 60 * 1000;
 const forceNormal = process.argv.includes('--normal-window');
@@ -39,18 +38,19 @@ const isOurs = (e) => isFrom(e, mascot) || isFrom(e, panel) || isFrom(e, setting
 const publicConfig = () => ({ ...cfg, normal, supportedApps: core.SUPPORTED_APPS, upcomingApps: core.UPCOMING_APPS });
 
 // ------------------------------------------------------------ mascot
-function clampMascot(x, y) {
-  const area = screen.getDisplayMatching({ x, y, width: MASCOT_SIZE, height: MASCOT_SIZE }).workArea;
-  return core.clampToArea(x, y, MASCOT_SIZE, MASCOT_SIZE, area, 8);
+function clampMascot(x, y, width, height) {
+  const area = screen.getDisplayMatching({ x, y, width, height }).workArea;
+  return core.clampToArea(x, y, width, height, area, 8);
 }
 
 function createMascot() {
+  const size = cfg.mascotSize;
   const pos = cfg.mascotX == null || cfg.mascotY == null
-    ? core.defaultMascotPosition(MASCOT_SIZE, screen.getPrimaryDisplay().workArea)
-    : clampMascot(cfg.mascotX, cfg.mascotY);
+    ? core.defaultMascotPosition(size, screen.getPrimaryDisplay().workArea)
+    : clampMascot(cfg.mascotX, cfg.mascotY, size, size);
 
   mascot = new BrowserWindow({
-    x: pos.x, y: pos.y, width: MASCOT_SIZE, height: MASCOT_SIZE, useContentSize: true,
+    x: pos.x, y: pos.y, width: size, height: size, useContentSize: true,
     title: 'Editing Coach',
     frame: normal, transparent: !normal, hasShadow: false,
     backgroundColor: normal ? '#1f3a4d' : '#00000000',
@@ -103,7 +103,8 @@ function hideForNow() {
 function reclampMascot() {
   if (!alive(mascot) || normal) return;
   const [x, y] = mascot.getPosition();
-  const c = clampMascot(x, y);
+  const [width, height] = mascot.getSize();
+  const c = clampMascot(x, y, width, height);
   if (c.x !== x || c.y !== y) { mascot.setPosition(c.x, c.y); savePosition(); placePanel(); }
 }
 
@@ -236,15 +237,30 @@ function registerIpc() {
   });
   ipcMain.on('mascot:drag-move', (e) => {
     if (!isFrom(e, mascot) || !drag) return;
+    const [width, height] = mascot.getSize();
     const c = screen.getCursorScreenPoint();
-    const p = clampMascot(drag.wx + (c.x - drag.cx), drag.wy + (c.y - drag.cy));
+    const p = clampMascot(drag.wx + (c.x - drag.cx), drag.wy + (c.y - drag.cy), width, height);
     mascot.setPosition(p.x, p.y);
     placePanel();
   });
-  ipcMain.on('mascot:drag-end', (e) => {
+  ipcMain.on('mascot:drag-end', (e, moved) => {
     if (!isFrom(e, mascot)) return;
-    if (drag) savePosition();
+    if (drag && moved === true) savePosition();
     drag = null;
+  });
+  ipcMain.on('mascot:zoom', (e) => {
+    if (!isFrom(e, mascot) || drag) return;
+    const size = core.nextMascotSize(cfg.mascotSize);
+    const old = mascot.getBounds();
+    const [contentWidth, contentHeight] = mascot.getContentSize();
+    const width = size + Math.max(0, old.width - contentWidth);
+    const height = size + Math.max(0, old.height - contentHeight);
+    const area = screen.getDisplayMatching(old).workArea;
+    const pos = core.clampToArea(old.x, old.y, width, height, area, 8);
+    mascot.setBounds({ ...pos, width, height });
+    cfg.mascotSize = size;
+    placePanel();
+    savePosition();
   });
   ipcMain.on('mascot:menu', (e) => {
     if (!isFrom(e, mascot)) return;
