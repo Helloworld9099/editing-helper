@@ -102,13 +102,18 @@ function hideForNow() {
   hideTimer = setTimeout(showMascot, HIDE_MS);
 }
 
-// Recover a useful chat size without hunting for the tiny resize grip.
-function resetChatSize() {
-  cfg.panelWidth = core.DEFAULTS.panelWidth;
-  cfg.panelHeight = core.DEFAULTS.panelHeight;
+// Offer explicit sizes so the chat can stay compact without imprecise dragging.
+// A preset is the only action here allowed to change the saved chat dimensions.
+function setChatSize(width, height) {
+  const next = { ...cfg, panelWidth: width, panelHeight: height };
+  try { core.saveConfig(next, cfgFile); }
+  catch (err) { console.error('Could not save chat size:', err.message); return; }
+  cfg = next;
   panelDrag = null;
-  persist();
   if (alive(panel) && alive(mascot)) placePanel();
+}
+function resetChatSize() {
+  setChatSize(core.DEFAULTS.panelWidth, core.DEFAULTS.panelHeight);
 }
 
 function reclampMascot() {
@@ -329,7 +334,10 @@ function registerIpc() {
     Menu.buildFromTemplate([
       { label: 'Ask a question', click: openPanel },
       { label: 'Settings…', click: () => openSettings('settings') },
-      { label: 'Reset chat size', click: resetChatSize },
+      { label: 'Chat size', submenu: [
+        { label: 'Compact (320 × 400)', click: () => setChatSize(320, 400) },
+        { label: 'Default (380 × 520)', click: resetChatSize },
+      ] },
       { label: 'Hide for 10 minutes', click: hideForNow },
       { type: 'separator' },
       { label: 'Quit Editing Coach', click: quitApp },

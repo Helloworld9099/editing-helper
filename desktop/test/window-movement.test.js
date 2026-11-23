@@ -116,4 +116,7 @@ test('pet remains 80px and the open chat follows during drag without resizing', 
   emit(chat, 'panel:resize', 'end');
   assert.deepEqual(chat.getSize(), [originalChat.width + 50, originalChat.height + 40]);
   assert.deepEqual(pet.getSize(), petSize);
+  // Repositioning never persists a larger size in the config file.
+  const saved = core.loadConfig(path.join(dir, 'config.json'));
+  assert.deepEqual([saved.panelWidth, saved.panelHeight], [430, 560]);
 });
