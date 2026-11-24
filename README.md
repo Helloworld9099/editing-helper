@@ -32,6 +32,10 @@ curl -fsS http://127.0.0.1:8000/v1/coach \
   -d '{"question":"Reply with hello."}'
 ```
 
+## Remember hosted desktop connection
+
+The Electron desktop app can remember your Northflank HTTPS server address and an OS-encrypted bearer token. Open **Settings**, enter **Server address** and **Access token** once, then launch with `cd desktop && npm start` in future sessions. The URL is stored in the user's Electron config; the bearer token is encrypted separately with Electron safeStorage and is never added to `config.json` or the repository. On Linux, the insecure `basic_text` fallback is rejected; unlock GNOME Keyring/KWallet to save credentials. See [desktop/README.md](desktop/README.md#connect-to-a-hosted-backend).
+
 ## Editor knowledge base (RAG)
 
 When enabled, Editing Helper searches an **offline-built SQLite FTS5 index** containing **3,066 editor-specific records** across all 11 supported editors: 55 short, original source-reviewed summaries plus 3,011 navigation-only links to official manuals and public community sources. A supplemental source import added 1,689 links after removing 30 canonical URL duplicates. These are **not 3,066 verified tutorials**: link-only entries point to sources but do not establish any specific editing procedure. Records are organized by editor folder, topic category, software version and source type.
