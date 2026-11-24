@@ -21,7 +21,7 @@
     log.classList.toggle('empty', messageCount === 0);
   }
 
-  // Everything is added with textContent: replies are shown as plain text, never as markup or script.
+  // Only AI replies use sanitized Markdown; user input and errors remain literal text.
   function addMessage(kind, who, text) {
     const el = document.createElement('div');
     el.className = 'msg ' + kind;
@@ -43,7 +43,11 @@
     }
     const body = document.createElement('div');
     body.className = 'body';
-    body.textContent = text;
+    if (kind === 'coach' && window.editingCoachMarkdown?.renderInto) {
+      window.editingCoachMarkdown.renderInto(body, text);
+    } else {
+      body.textContent = text;
+    }
     el.appendChild(body);
     if (kind === 'error') el.setAttribute('role', 'alert');
     log.appendChild(el);
@@ -158,6 +162,7 @@
   api.on('panel:side', (side) => {
     if (side === 'left' || side === 'right') document.body.dataset.panelSide = side;
   });
+  api.on('panel:config-changed', () => { void showEditor(); });
   api.on('panel:shown', () => { input.focus(); void showEditor(); });
   syncControls();
   void showEditor();

@@ -126,7 +126,7 @@ test('input validation happens before any request', () =>
 test('HTML in a reply stays literal text', () =>
   withServer((req, res) => json(res, 200, { answer: '<img src=x onerror=alert(1)>' }), async (s) => {
     const r = await core.postCoach({ baseUrl: s.url, question: 'hi' });
-    assert.equal(r.answer, '<img src=x onerror=alert(1)>');   // untouched; the UI uses textContent
+    assert.equal(r.answer, '<img src=x onerror=alert(1)>');   // transport leaves raw text alone; renderer sanitizes Markdown
   }));
 
 // ---- URLs ---------------------------------------------------------------
@@ -247,26 +247,43 @@ test('sanitizeText strips control characters but keeps newlines', () => {
   assert.equal(core.sanitizeText('a\u0000b\u001b[31m\r\nc\td'), 'ab[31m\nc\td');
 });
 
-test('config: preserves a supported editor and resets unsupported legacy picks', () => {
+const requestedEditors = [
+  'Adobe Premiere Pro', 'DaVinci Resolve', 'Kdenlive', 'Shotcut', 'CapCut',
+  'ACDSee Luxea', 'Lightworks', 'Clipchamp', 'OpenShot', 'Canva', 'iMovie',
+];
+
+test('catalog contains the eleven requested editing applications', () => {
+  assert.deepEqual([...core.SUPPORTED_APPS], requestedEditors);
+  assert.deepEqual([...core.UPCOMING_APPS], ['Final Cut Pro']);
+  assert.equal(new Set(core.SUPPORTED_APPS).size, core.SUPPORTED_APPS.length);
+});
+
+test('config: preserves every supported editor and rejects unsupported or empty selections', () => {
   const f = tmpFile();
   assert.equal(core.loadConfig(f).editor, '');
-  for (const editor of ['DaVinci Resolve', '', 'Kdenlive']) {
+  for (const editor of [...requestedEditors, '', 'Unknown Editor', 'Final Cut Pro']) {
     core.saveConfig({ ...core.DEFAULTS, setupDone: true, editor, editorVersion: '20' }, f);
     const cfg = core.loadConfig(f);
-    assert.equal(cfg.setupDone, editor === 'DaVinci Resolve');
-    assert.equal(cfg.editor, cfg.setupDone ? editor : '');
-    assert.equal(cfg.editorVersion, cfg.setupDone ? '20' : '');
+    const valid = requestedEditors.includes(editor);
+    assert.equal(cfg.setupDone, valid, editor);
+    assert.equal(cfg.editor, valid ? editor : '', editor);
+    assert.equal(cfg.editorVersion, valid ? '20' : '', editor);
   }
 });
 
-test('client sends the selected editor and optional version; rejects unsupported editors', async () => {
+test('client sends the selected editor and optional version; rejects unknown editors', async () => {
   await withServer((req, res) => json(res, 200, { answer: 'Step one' }), async (s) => {
-    for (const version of ['', '20.1']) {
-      const result = await core.postCoach({ baseUrl: s.url, question: 'How?', editor: 'DaVinci Resolve', version });
-      assert.equal(result.ok, true);
-      assert.deepEqual(JSON.parse(s.state.body), { question: 'How?', editor: 'DaVinci Resolve', ...(version && { version }) });
+    for (const editor of requestedEditors) {
+      for (const version of ['', '20.1']) {
+        const result = await core.postCoach({ baseUrl: s.url, question: 'How?', editor, version });
+        assert.equal(result.ok, true, editor);
+        assert.deepEqual(JSON.parse(s.state.body), { question: 'How?', editor, ...(version && { version }) });
+      }
     }
-    assert.equal((await core.postCoach({ baseUrl: s.url, question: 'How?', editor: 'Shotcut' })).kind, 'config');
+    const hits = s.state.hits;
+    assert.equal((await core.postCoach({ baseUrl: s.url, question: 'How?', editor: 'Unknown Editor' })).kind, 'config');
+    assert.equal((await core.postCoach({ baseUrl: s.url, question: 'How?', editor: 'Final Cut Pro' })).kind, 'config');
+    assert.equal(s.state.hits, hits, 'unsupported editors must be rejected before contacting the API');
   });
 });
 

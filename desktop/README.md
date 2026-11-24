@@ -21,8 +21,7 @@ cd desktop
 npm start
 ```
 
-1. Choose **DaVinci Resolve** and click **Start**. No editor is preselected;
-   other listed editors are coming soon. The version is optional.
+1. Choose an editor (for example, **Kdenlive** or **DaVinci Resolve**) and click **Start**. All 11 requested editors are selectable; none is preselected. The version is optional.
 2. Click the floating pet, open **Settings**, and set **Server address** to
    `http://127.0.0.1:8001`. Save.
 3. Ask **How do I make a camera shake?** The mock should echo the question and
@@ -58,6 +57,12 @@ mode uses regular framed windows. Windows and macOS are not verified.
 Set **Server address** back to `http://127.0.0.1:8000`. See the
 [root README](../README.md) to start the local API and a runner. The desktop
 makes requests in Electron's main process, so no CORS change is needed.
+AI responses are rendered as sanitized Markdown in the chat bubble. Headings, lists, bold text, and code blocks display normally; potentially unsafe HTML and images are discarded. User messages and error messages are kept as literal text.
+
+## Supported editing software
+
+The editor selector offers AI guidance for **Adobe Premiere Pro, DaVinci Resolve, Kdenlive, Shotcut, CapCut, ACDSee Luxea, Lightworks, Clipchamp, OpenShot, Canva, and iMovie**. The choice and optional version are sent to the same FastAPI endpoint. The app is **not** integrated with the editor's controls or files, and answers are not verified against documentation for every editor/version; check menu names and edition limitations before following advanced instructions.
+
 The request shape is `{"question":"...", "editor":"DaVinci Resolve", "version":"20.1"}`
 (version optional); the response is `{"answer":"..."}`.
 

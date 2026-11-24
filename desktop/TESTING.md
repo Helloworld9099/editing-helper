@@ -15,7 +15,7 @@ redirects, oversized replies, config save/restore/corruption, URL validation, wi
     python3 test/ui/ui_check.py
 
 Loads the real `renderer/*.html` pages in headless Chromium with a fake bridge. Checks Enter / Shift+Enter / Esc,
-duplicate-submit blocking, waiting state, replies shown as literal text, no focus steal, click vs drag vs
+duplicate-submit blocking, waiting state, sanitized Markdown replies, no focus steal, click vs drag vs
 right-click, setup/settings flows. Screenshots land in `test/ui/out/`.
 This does **not** exercise real Electron windows. That's layer 3. (Playwright is test tooling only; the app itself is JS.)
 
@@ -38,12 +38,16 @@ Settings -> Server address `http://127.0.0.1:8001` -> Save. Open the panel and t
 | `/slow`             | "Thinking..." for ~8s, pet's eyes glance, Send disabled, UI responsive |
 | `/err`              | red message: HTTP 500 + "mock: ollama unavailable"; question restored |
 | `/bad` `/noanswer`  | red "wasn't valid JSON" / "no text answer field"                      |
-| `/html`             | the tags shown as literal text, no alert, nothing rendered as HTML    |
+| `/html`             | unsafe HTML is sanitized; no script executes and no image is injected |
 | `/long`             | long reply scrolls inside the panel                                   |
 | `/hang`             | timeout message (first set `"timeoutSeconds": 5` in the config file)  |
 
 Stop the mock and send a question: you should get "Can't reach the coach server".
 Then point Settings back to `http://127.0.0.1:8000` and try your real FastAPI backend.
+
+### Multi-editor smoke test
+
+Choose a different editor in Settings and verify that the app remembers the choice after restarting. Repeat a short question with Kdenlive, Adobe Premiere Pro, and one web-based editor (Clipchamp or Canva). Verify that the selected name and optional version reach the mock backend in the returned message. The app provides AI guidance, not verified instructions or direct control of an editing program. The unit tests check all eleven editor names and verify that unsupported values are rejected before making a request.
 
 ### Window behavior checklist (what only your laptop can answer)
 

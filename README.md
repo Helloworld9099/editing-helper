@@ -21,7 +21,8 @@ If Ubuntu reports that `venv` is unavailable, install your distro's `python3-ven
 ## Frontend contract
 
 - `GET /health` is public on allowed hosts and returns `{"status":"ok"}` when the API process is up.
-- `POST /v1/coach` takes `{"question":"..."}` as JSON. A successful reply is `{"answer":"..."}`. Render the answer as plain text.
+- The desktop supports AI questions for Adobe Premiere Pro, DaVinci Resolve, Kdenlive, Shotcut, CapCut, ACDSee Luxea, Lightworks, Clipchamp, OpenShot, Canva, and iMovie. This selects answer context; it does not verify or automate instructions inside those programs.
+- `POST /v1/coach` takes `{"question":"..."}` as JSON. A successful reply is `{"answer":"..."}`. The desktop renders trusted-formatting-only Markdown from the returned answer.
 - A missing or invalid hosted access token returns `401`. Invalid input returns `422`, a busy coach returns `429`, an unavailable provider or model returns `503`, a model timeout returns `504`, and other upstream failures return `502`. Errors contain a `detail` field.
 
 ```bash
