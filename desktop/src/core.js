@@ -175,7 +175,7 @@ function activeConnection(cfg, savedToken = '', env = process.env) {
 
 // Public builds use a publisher-configured, nonsecret HTTPS backend address.
 // Never load developer URL/token values from a packaged app's userData directory.
-function managedConnection(releaseConfig) {
+function managedConnection(releaseConfig, userAccessToken = '') {
   const candidate = releaseConfig && releaseConfig.apiBaseUrl;
   const { url, error } = validateBaseUrl(candidate);
   if (error || !url || new URL(url).protocol !== 'https:') {
@@ -184,9 +184,11 @@ function managedConnection(releaseConfig) {
   if (releaseConfig.authentication !== 'user-accounts') {
     return { error: 'Public sign-in is not configured yet. This build cannot use the private developer server.' };
   }
-  // Future authentication flow must return a verified user session here.
-  // Until then, fail closed rather than sending anonymous requests to a billed Gemini API.
-  return { error: 'Public account sign-in is not implemented in this build.' };
+  // A signed-in user's short-lived Supabase JWT is checked by FastAPI on every request.
+  if (!/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(userAccessToken)) {
+    return { error: 'Sign in to Editing Helper to continue.' };
+  }
+  return { baseUrl: url, accessToken: userAccessToken };
 }
 
 // ------------------------------------------------------------ API client
