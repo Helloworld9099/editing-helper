@@ -8,7 +8,7 @@ ENV PYTHONUNBUFFERED=1 \
 WORKDIR /app
 COPY requirements.txt .
 RUN python -m pip install --no-cache-dir -r requirements.txt
-COPY app.py knowledge_rag.py ./
+COPY app.py knowledge_rag.py public_access.py ./
 COPY knowledge/sources/ ./knowledge/sources/
 RUN python knowledge_rag.py build \
     && python -c 'from collections import Counter; from knowledge_rag import read_notes, SUPPORTED_EDITORS; n=read_notes(); c=Counter(x["editor"] for x in n); assert set(c)==SUPPORTED_EDITORS, f"Missing editors: {SUPPORTED_EDITORS-set(c)}"; print(f"Verified {len(n)} source records across {len(c)} editors")'
