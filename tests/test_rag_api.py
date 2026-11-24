@@ -64,12 +64,12 @@ class RAGBackendTests(unittest.TestCase):
             self.assertTrue(all(s["editor"] == "Kdenlive" for s in answer["sources"]))
             self.assertTrue(all(s["url"].startswith("https://") for s in answer["sources"]))
 
-    def test_version_mismatch_does_not_attach_unrelated_sources(self):
+    def test_version_mismatch_never_labels_newer_guide_as_compatible(self):
         def fake(request):
             question = json.loads(request.content)["contents"][0]["parts"][0]["text"]
-            self.assertNotIn("RETRIEVED REFERENCE DATA", question)
+            self.assertNotIn('"version": "26.08"', question)
             return httpx.Response(200, json={"candidates": [{"content": {
-                "parts": [{"text": "I do not have a version-specific reference."}]
+                "parts": [{"text": "Check your installed release for exact controls."}]
             }}]})
 
         with self.client(fake) as client:
@@ -77,7 +77,9 @@ class RAGBackendTests(unittest.TestCase):
                 "editor": "Kdenlive", "version": "25.08", "question": "How do I make a zoom?",
             })
             self.assertEqual(response.status_code, 200)
-            self.assertNotIn("sources", response.json())
+            self.assertTrue(all(s["version"] != "26.08" for s in response.json().get("sources", [])))
+            self.assertTrue(all(s["review_status"] == "link_checked"
+                                for s in response.json().get("sources", [])))
 
     def test_other_editor_uses_its_own_documentation_without_cross_contamination(self):
         def fake(request):
