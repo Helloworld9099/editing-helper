@@ -306,7 +306,8 @@ function registerIpc() {
     try {
       const status = await publicAuth.verifyCode(email, code);
       notifyAccountChanged();
-      if (alive(signinWin)) signinWin.close();
+      // Allow the IPC reply to reach the sign-in renderer before closing it.
+      setTimeout(() => { if (alive(signinWin)) signinWin.close(); }, 150);
       return { ok: true, ...status };
     } catch (error) { return { ok: false, message: error.message }; }
   });
