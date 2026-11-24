@@ -2,7 +2,7 @@
 
 **Desktop app:** See [desktop/README.md](desktop/README.md) to launch the floating frontend and test it without a model.
 
-API for the Editing Helper desktop companion. It returns model-generated editing advice from a local model or Groq.
+API for the Editing Helper desktop companion. It returns model-generated editing advice through Ollama, llama.cpp, Groq, or Google Gemini.
 
 ## Start on Ubuntu
 
@@ -39,17 +39,34 @@ Change `COACH_MODEL` in the server's environment and restart to try a different 
 
 Build the root `Dockerfile` in your Northflank service and expose container port `8000` as public HTTP. Use the service's HTTPS URL in the desktop app. [Northflank port configuration](https://northflank.com/docs/v1/application/network/configure-ports)
 
-Set these runtime environment variables:
+Set the shared runtime environment variables for either hosted provider.
+
+| Variable | Value |
+| --- | --- |
+| `COACH_ACCESS_TOKEN` | A separate shared secret for desktop clients. Generate one with `python -c 'import secrets; print(secrets.token_urlsafe(32))'`. |
+| `COACH_ALLOWED_HOSTS` | Comma-separated hostnames without schemes or ports, including your Northflank hostname, any custom domain, and `127.0.0.1` for the probe below |
+
+For Google Gemini, use the following provider settings.
+
+| Variable | Value |
+| --- | --- |
+| `COACH_PROVIDER` | `gemini` |
+| `COACH_MODEL` | Optional Gemini model ID. Leave unset to use `gemini-2.5-flash`. |
+| `GEMINI_API_KEY` | Your Google Gemini API key, injected as a server secret |
+
+The backend calls Google's [native Gemini API](https://ai.google.dev/api/generate-content). Google lists `gemini-2.5-flash` as deprecated with API access limited to existing users until December 1, 2026. If your project lacks access, set `COACH_MODEL` to a supported text-generation model available to your project. [Gemini 2.5 Flash availability](https://ai.google.dev/gemini-api/docs/models/gemini-2.5-flash)
+
+For Groq, use the following provider settings.
 
 | Variable | Value |
 | --- | --- |
 | `COACH_PROVIDER` | `groq` |
 | `COACH_MODEL` | A [Groq chat model ID](https://console.groq.com/docs/api-reference#chat-create), for example `llama-3.3-70b-versatile` |
 | `GROQ_API_KEY` | Your Groq API key, injected as a server secret |
-| `COACH_ACCESS_TOKEN` | A separate shared secret for desktop clients. Generate one with `python -c 'import secrets; print(secrets.token_urlsafe(32))'`. |
-| `COACH_ALLOWED_HOSTS` | Comma-separated hostnames without schemes or ports, including your Northflank hostname, any custom domain, and `127.0.0.1` for the probe below |
 
-Groq and the production container require `COACH_ACCESS_TOKEN` at startup. For a hosted deployment outside Docker, `COACH_REQUIRE_AUTH=1` also makes the token mandatory with either local provider. Setting `COACH_ACCESS_TOKEN` protects `/v1/coach` with every provider.
+Gemini, Groq, and the production container require `COACH_ACCESS_TOKEN` at startup. For a hosted deployment outside Docker, `COACH_REQUIRE_AUTH=1` also makes the token mandatory with either local provider. Setting `COACH_ACCESS_TOKEN` protects `/v1/coach` with every provider.
+
+[.env.example](.env.example) shows the runtime settings. When running outside Northflank, export the settings in the environment that starts Uvicorn.
 
 Use a Northflank command health check to probe the loopback address. [Northflank health-check configuration](https://northflank.com/docs/v1/application/observe/configure-health-checks)
 
@@ -65,7 +82,7 @@ To connect Electron, set `EDITING_HELPER_API` to the HTTPS service URL and `EDIT
 .venv/bin/python -m unittest discover -s tests -v
 ```
 
-Tests use simulated Ollama, llama.cpp, and Groq responses and cover access tokens, allowed hosts, and public health checks.
+Tests use simulated Ollama, llama.cpp, Groq, and Gemini responses and cover access tokens, allowed hosts, public health checks, and upstream errors.
 
 ## Local desktop build and training
 

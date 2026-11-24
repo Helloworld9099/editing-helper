@@ -1,4 +1,4 @@
-"""Editing Helper API for local models and hosted Groq deployments."""
+"""Editing Helper API for local models, Groq, and Google Gemini."""
 import asyncio
 import os
 import re
@@ -14,11 +14,14 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 OLLAMA_CHAT = "http://127.0.0.1:11434/api/chat"
 LLAMA_CHAT = "http://127.0.0.1:8081/v1/chat/completions"
 GROQ_CHAT = "https://api.groq.com/openai/v1/chat/completions"
+GEMINI_GENERATE = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 DEFAULT_MODEL = "qwen3.5:4b"
+DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
 PROVIDERS = {
     "ollama": ("Ollama", OLLAMA_CHAT, {"options": {"num_predict": 512}, "think": False}),
     "llama.cpp": ("llama.cpp", LLAMA_CHAT, {"max_tokens": 512}),
     "groq": ("Groq", GROQ_CHAT, {"max_completion_tokens": 512}),
+    "gemini": ("Gemini", GEMINI_GENERATE, {}),
 }
 
 
@@ -38,17 +41,31 @@ class CoachReply(BaseModel):
     answer: str
 
 
+def gemini_answer(result):
+    parts = result["candidates"][0]["content"]["parts"]
+    if not isinstance(parts, list):
+        raise ValueError("Invalid Gemini content parts")
+    return "".join(
+        part["text"]
+        for part in parts
+        if isinstance(part, dict) and not part.get("thought") and isinstance(part.get("text"), str)
+    )
+
+
 def create_app(*, model=None, timeout=60.0, transport=None, provider=None):
     provider = provider or os.environ.get("COACH_PROVIDER", "ollama")
     if provider not in PROVIDERS:
-        raise ValueError("COACH_PROVIDER must be ollama, llama.cpp, or groq.")
+        raise ValueError("COACH_PROVIDER must be ollama, llama.cpp, groq, or gemini.")
     engine, url, limits = PROVIDERS[provider]
     groq = provider == "groq"
+    gemini = provider == "gemini"
+    hosted = groq or gemini
     if model is None:
-        model = os.environ.get("COACH_MODEL", "" if groq else DEFAULT_MODEL)
+        default_model = {"groq": "", "gemini": DEFAULT_GEMINI_MODEL}.get(provider, DEFAULT_MODEL)
+        model = os.environ.get("COACH_MODEL", default_model)
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:/-]{0,127}", model):
         raise ValueError("COACH_MODEL must be a valid model ID.")
-    if not groq and re.search(
+    if not hosted and re.search(
         r"(^|[:/.-])cloud($|[:/.-])", model, re.IGNORECASE
     ):
         raise ValueError("COACH_MODEL must name a local model for this provider.")
@@ -59,9 +76,18 @@ def create_app(*, model=None, timeout=60.0, transport=None, provider=None):
         if not groq_key:
             raise ValueError("GROQ_API_KEY is required for Groq.")
         upstream_headers["Authorization"] = f"Bearer {groq_key}"
+    elif gemini:
+        model = model.removeprefix("models/")
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", model):
+            raise ValueError("COACH_MODEL must be a valid Gemini model ID.")
+        url = url.format(model=model)
+        gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
+        if not gemini_key:
+            raise ValueError("GEMINI_API_KEY is required for Gemini.")
+        upstream_headers["x-goog-api-key"] = gemini_key
 
     access_token = os.environ.get("COACH_ACCESS_TOKEN", "").strip()
-    if not access_token and (groq or os.environ.get("COACH_REQUIRE_AUTH") == "1"):
+    if not access_token and (hosted or os.environ.get("COACH_REQUIRE_AUTH") == "1"):
         raise ValueError("COACH_ACCESS_TOKEN is required for hosted deployments.")
     if access_token and not re.fullmatch(r"[A-Za-z0-9._~+/=-]+", access_token):
         raise ValueError("COACH_ACCESS_TOKEN must be a valid bearer token.")
@@ -115,16 +141,22 @@ def create_app(*, model=None, timeout=60.0, transport=None, provider=None):
                         if body.version:
                             question += f"Version: {body.version.strip()}\n"
                         question += body.question
-                    reply = await request.app.state.model_client.post(url, headers=upstream_headers, json={
-                        "model": model,
-                        "messages": [{"role": "user", "content": question}],
-                        "stream": False,
-                        **limits,
-                    })
+                    if gemini:
+                        payload = {"contents": [{"role": "user", "parts": [{"text": question}]}]}
+                    else:
+                        payload = {
+                            "model": model,
+                            "messages": [{"role": "user", "content": question}],
+                            "stream": False,
+                            **limits,
+                        }
+                    reply = await request.app.state.model_client.post(url, headers=upstream_headers, json=payload)
                     reply.raise_for_status()
                     result = reply.json()
                     if provider == "ollama":
                         answer = result["message"]["content"]
+                    elif gemini:
+                        answer = gemini_answer(result)
                     else:
                         answer = result["choices"][0]["message"]["content"]
                     if not isinstance(answer, str) or not answer.strip():

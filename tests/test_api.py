@@ -163,5 +163,110 @@ class CloudBackendTests(unittest.TestCase):
                 create_app()
 
 
+class GeminiBackendTests(unittest.TestCase):
+    env = {
+        "COACH_PROVIDER": "gemini",
+        "GEMINI_API_KEY": "test-gemini-key",
+        "COACH_ACCESS_TOKEN": "test-coach-token",
+    }
+    auth = {"Authorization": "Bearer test-coach-token"}
+
+    def client(self, handler, **settings):
+        with patch.dict("os.environ", {**self.env, **settings}, clear=True):
+            api = create_app(transport=httpx.MockTransport(handler))
+        return TestClient(api, base_url="http://127.0.0.1:8000")
+
+    def test_native_request_and_multipart_answer(self):
+        def fake(request):
+            self.assertEqual(request.method, "POST")
+            self.assertEqual(
+                str(request.url),
+                "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+            )
+            self.assertEqual(request.headers["x-goog-api-key"], "test-gemini-key")
+            self.assertNotIn("Authorization", request.headers)
+            self.assertEqual(json.loads(request.content), {
+                "contents": [{
+                    "role": "user",
+                    "parts": [{"text": "Editor: DaVinci Resolve\nVersion: 20\nZoom?"}],
+                }],
+            })
+            return httpx.Response(200, json={"candidates": [{"content": {"parts": [
+                {"text": "Internal thought summary", "thought": True},
+                {"text": "Open the Inspector.\n"},
+                {"thoughtSignature": "opaque"},
+                {"text": "Adjust Zoom."},
+            ]}}]})
+
+        with self.client(fake) as client:
+            response = client.post("/v1/coach", headers=self.auth, json={
+                "question": " Zoom? ", "editor": " DaVinci Resolve ", "version": " 20 ",
+            })
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json(), {"answer": "Open the Inspector.\nAdjust Zoom."})
+
+    def test_model_override(self):
+        def fake(request):
+            self.assertEqual(request.url.path, "/v1beta/models/gemini-test:generateContent")
+            return httpx.Response(200, json={"candidates": [{"content": {"parts": [{"text": "Hi"}]}}]})
+
+        for model in ("gemini-test", "models/gemini-test"):
+            with self.subTest(model=model), self.client(fake, COACH_MODEL=model) as client:
+                response = client.post("/v1/coach", headers=self.auth, json={"question": "Hello"})
+                self.assertEqual(response.json(), {"answer": "Hi"})
+
+    def test_coach_authentication(self):
+        def never(request):
+            self.fail("An unauthorized request or health check reached Gemini")
+
+        with self.client(never) as client:
+            self.assertEqual(client.get("/health").json(), {"status": "ok"})
+            for headers in ({}, {"Authorization": "Bearer wrong"}, {"x-goog-api-key": "test-gemini-key"}):
+                with self.subTest(headers=headers):
+                    response = client.post("/v1/coach", headers=headers, json={"question": "Hello"})
+                    self.assertEqual(response.status_code, 401)
+                    self.assertEqual(response.headers["WWW-Authenticate"], "Bearer")
+
+    def test_invalid_replies_and_upstream_errors(self):
+        cases = [
+            (httpx.Response(200, text="not JSON"), 502),
+            (httpx.Response(200, json={"promptFeedback": {"blockReason": "SAFETY"}}), 502),
+            (httpx.Response(200, json={"candidates": []}), 502),
+            (httpx.Response(200, json={"candidates": [{"content": {"parts": {"text": "Hi"}}}]}), 502),
+            (httpx.Response(200, json={"candidates": [{"content": {"parts": [
+                {"text": 123}, {"text": " "}, {"text": "thought only", "thought": True},
+            ]}}]}), 502),
+            (httpx.Response(401, text="test-gemini-key"), 502),
+            (httpx.Response(404), 503),
+            (httpx.Response(429), 502),
+            (httpx.Response(500), 502),
+        ]
+        for upstream, expected in cases:
+            with self.subTest(upstream=upstream), self.client(lambda request: upstream) as client:
+                response = client.post("/v1/coach", headers=self.auth, json={"question": "Hello"})
+                self.assertEqual(response.status_code, expected)
+                self.assertIn("Gemini", response.json()["detail"])
+                self.assertNotIn("test-gemini-key", response.text)
+
+    def test_connection_errors_and_timeouts(self):
+        for error, expected in ((httpx.ConnectError, 503), (httpx.ReadTimeout, 504)):
+            def fail(request):
+                raise error("private upstream detail", request=request)
+
+            with self.subTest(error=error), self.client(fail) as client:
+                response = client.post("/v1/coach", headers=self.auth, json={"question": "Hello"})
+                self.assertEqual(response.status_code, expected)
+                self.assertIn("Gemini", response.json()["detail"])
+                self.assertNotIn("private upstream detail", response.text)
+
+    def test_invalid_configuration(self):
+        for setting, value in (
+            ("GEMINI_API_KEY", " "), ("COACH_ACCESS_TOKEN", ""), ("COACH_MODEL", "models/../other"),
+        ):
+            with self.subTest(setting=setting), patch.dict("os.environ", {**self.env, setting: value}, clear=True):
+                with self.assertRaisesRegex(ValueError, setting):
+                    create_app()
+
+
 if __name__ == "__main__":
     unittest.main()
