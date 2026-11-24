@@ -103,7 +103,7 @@ def build_index(folder: Path = SOURCES_DIR, database: Path | None = None) -> int
     """Rebuild atomically. Run during Docker build or before starting a local API."""
     docs = read_notes(folder)
     if not docs:
-        raise ValueError("No reviewed knowledge notes found. Add source_checked entries first.")
+        raise ValueError("No indexed knowledge entries found. Add source_checked or link_checked entries first.")
     db = database or index_path()
     db.parent.mkdir(parents=True, exist_ok=True)
     temporary = db.with_name(db.name + ".tmp")
@@ -236,7 +236,7 @@ def main() -> None:
     query.add_argument("question")
     args = parser.parse_args()
     if args.command == "validate":
-        print(f"Validated {len(read_notes())} source-checked notes")
+        print(f"Validated {len(read_notes())} indexed records (source notes and links)")
     elif args.command == "stats":
         from collections import Counter
         entries = read_notes()
