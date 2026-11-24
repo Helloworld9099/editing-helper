@@ -48,6 +48,8 @@ class CoachSource(BaseModel):
     editor: str
     version: str
     source_kind: str
+    review_status: str = "link_checked"
+    category: str = "general"
 
 
 class CoachReply(BaseModel):
@@ -209,7 +211,8 @@ def create_app(*, model=None, timeout=60.0, transport=None, provider=None):
         return CoachReply(answer=answer, sources=[
             CoachSource(id=n["id"], title=n["title"], url=n["url"],
                         editor=n["editor"], version=n["version"],
-                        source_kind=n["source_kind"]) for n in notes
+                        source_kind=n["source_kind"],
+                        review_status=n["review_status"], category=n["category"]) for n in notes
         ] or None)
 
     return api
