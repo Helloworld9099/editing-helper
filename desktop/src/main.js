@@ -312,7 +312,7 @@ function registerIpc() {
     } catch (error) { return { ok: false, message: error.message }; }
   });
   ipcMain.handle('auth:sign-out', async (e) => {
-    if (!publicMode || !isOurs(e)) return { ok: false };
+    if (!publicMode || (!isOurs(e) && !isFrom(e, signinWin))) return { ok: false };
     await publicAuth.signOut();
     notifyAccountChanged();
     return { ok: true };
