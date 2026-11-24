@@ -12,11 +12,12 @@ OUT.mkdir(exist_ok=True)
 STUB = """
 (() => {
   const cfg = Object.assign({setupDone:true, editor:'DaVinci Resolve', editorVersion:'20.1', apiBaseUrl:'http://127.0.0.1:8000',
-    keepOnTop:true, windowMode:'floating', normal:false, supportedApps:['DaVinci Resolve'], upcomingApps:['Kdenlive','Shotcut']}, %s);
+    keepOnTop:true, windowMode:'floating', normal:false, supportedApps:['Adobe Premiere Pro','DaVinci Resolve','Kdenlive','Shotcut','CapCut','ACDSee Luxea','Lightworks','Clipchamp','OpenShot','Canva','iMovie'], upcomingApps:['Final Cut Pro']}, %s);
   const calls = []; const listeners = {}; let pending = null;
   window.__calls = calls; window.__closed = false;
   window.close = () => { window.__closed = true; };
   window.__emit = (ch, p) => (listeners[ch] || []).forEach(f => f(p));
+  window.__selectEditor = (name, version = '') => { cfg.editor = name; cfg.editorVersion = version; window.__emit('panel:config-changed'); };
   window.__resolveAsk = (r) => pending && pending(r);
   window.__saveResult = {ok:true, restartNeeded:false};
   window.coach = {
@@ -75,6 +76,11 @@ with sync_playwright() as pw:
           minimum.evaluate("(() => {const s=document.querySelector('#send').getBoundingClientRect(); return document.documentElement.scrollWidth <= innerWidth && s.bottom <= innerHeight;})()"))
     check("panel: welcome note mentions app and says not verified",
           "DaVinci Resolve 20.1" in p.inner_text("#log") and "aren't checked against sources" in p.inner_text("#log"))
+    p.evaluate("window.__selectEditor('Kdenlive', '26.08')")
+    p.wait_for_timeout(50)
+    check("panel: editor label refreshes after Settings change without reopening",
+          "Kdenlive 26.08" in p.inner_text("#log") and "DaVinci Resolve 20.1" not in p.inner_text("#log"))
+    p.evaluate("window.__selectEditor('DaVinci Resolve', '20.1')")
     pb, _ = open_page("panel.html", cfg={"editor": "", "editorVersion": ""})
     check("panel: works with no editing app set (generic welcome)",
           "DaVinci Resolve" not in pb.inner_text("#log") and "Choose your editor" in pb.inner_text("#log"))
@@ -194,14 +200,18 @@ with sync_playwright() as pw:
           p.evaluate("(() => {const s=document.querySelector('#save').getBoundingClientRect();return s.bottom <= innerHeight && document.documentElement.scrollWidth <= innerWidth;})()"))
     check("setup: no editor preselected", p.input_value("#editor") == "")
     check("setup: editor/version visible, no server or edition field", p.is_visible("#editor") and p.is_visible("#version") and not p.is_visible("#url") and "Studio" not in p.inner_text("body"))
-    check("setup: upcoming editor disabled", p.locator("#editor option[value=Kdenlive]").is_disabled())
+    check("setup: shows all eleven available editors",
+          p.locator("#editor option:not([disabled])").count() == 11
+          and not p.locator("#editor option[value=Kdenlive]").is_disabled()
+          and not p.locator("#editor option[value=iMovie]").is_disabled())
+    check("setup: future editor stays disabled", p.locator("#editor option[value='Final Cut Pro']").is_disabled())
     p.click("#save")
     check("setup: cannot skip the editor", not names(p) and "Choose a supported" in p.inner_text("#error"))
-    p.select_option("#editor", "DaVinci Resolve")
+    p.select_option("#editor", "Kdenlive")
     p.click("#save")
     p.wait_for_timeout(100)
     saves = p.evaluate("window.__calls.filter(c=>c[0]==='save')")
-    check("setup: saves explicit editor with optional version", len(saves) == 1 and saves[0][1] == {"editor": "DaVinci Resolve", "editorVersion": "", "finishSetup": True}, saves)
+    check("setup: saves explicit editor with optional version", len(saves) == 1 and saves[0][1] == {"editor": "Kdenlive", "editorVersion": "", "finishSetup": True}, saves)
     check("setup: window closes after saving", p.evaluate("window.__closed"))
     p.screenshot(path=str(OUT / "setup.png"))
 
@@ -216,9 +226,9 @@ with sync_playwright() as pw:
     p.fill("#url", "ftp://x"); p.click("#save"); p.wait_for_timeout(100)
     check("settings: validation error shown, window stays open", "must start with http" in p.inner_text("#error") and not p.evaluate("window.__closed"))
     p.evaluate("window.__saveResult = {ok:true, restartNeeded:true}")
-    p.fill("#url", "https://coach.example.com"); p.check("#normalMode"); p.click("#save"); p.wait_for_timeout(100)
+    p.fill("#url", "https://coach.example.com"); p.select_option("#editor", "ACDSee Luxea"); p.check("#normalMode"); p.click("#save"); p.wait_for_timeout(100)
     last = p.evaluate("window.__calls.filter(c=>c[0]==='save').slice(-1)[0][1]")
-    check("settings: sends URL, keepOnTop, windowMode", last["apiBaseUrl"] == "https://coach.example.com" and last["windowMode"] == "normal" and last["keepOnTop"] is True and last["finishSetup"] is False, last)
+    check("settings: sends URL, keepOnTop, windowMode", last["apiBaseUrl"] == "https://coach.example.com" and last["windowMode"] == "normal" and last["keepOnTop"] is True and last["finishSetup"] is False and last["editor"] == "ACDSee Luxea", last)
     check("settings: restart notice shown when mode changes", "next time you start" in p.inner_text("#info"))
     p.screenshot(path=str(OUT / "settings.png"))
     b.close()
