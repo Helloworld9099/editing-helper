@@ -281,8 +281,8 @@ function registerIpc() {
     } else if (replacementToken && !secureTokenStorageAvailable) {
       errors.accessToken = 'Secure system keyring unavailable. Unlock GNOME Keyring or KWallet, then reopen Settings.';
     }
-    if (!error && (replacementToken || savedAccessToken) && !core.isLoopback(new URL(url).hostname) &&
-        new URL(url).protocol !== 'https:') {
+    if (!error && (replacementToken || (!forgetToken && savedAccessToken)) &&
+        !core.isLoopback(new URL(url).hostname) && new URL(url).protocol !== 'https:') {
       errors.apiBaseUrl = 'Use HTTPS for a hosted server when using an access token.';
     }
     if (Object.keys(errors).length) return { ok: false, errors };
@@ -341,8 +341,7 @@ function registerIpc() {
     let result;
     try {
       result = await core.postCoach({
-        baseUrl: process.env.EDITING_HELPER_API || cfg.apiBaseUrl,
-        accessToken: process.env.EDITING_HELPER_ACCESS_TOKEN || savedAccessToken,
+        ...core.activeConnection(cfg, savedAccessToken),
         question,
         editor: cfg.editor,
         version: cfg.editorVersion,
