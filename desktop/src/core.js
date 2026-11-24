@@ -12,8 +12,9 @@ const COACH_PATH = '/v1/coach';
 const MAX_RESPONSE_BYTES = 1_000_000;
 const MAX_QUESTION_CHARS = 1000; // matches /v1/coach
 // Only entries in SUPPORTED_APPS can be saved or sent.
-const SUPPORTED_APPS = Object.freeze(['DaVinci Resolve']);
-const UPCOMING_APPS = Object.freeze(['Kdenlive', 'Adobe Premiere Pro', 'Final Cut Pro', 'CapCut', 'Shotcut', 'OpenShot']);
+// AI guidance is available for these editors; individual answers are not yet documentation-verified.
+const SUPPORTED_APPS = Object.freeze(["Adobe Premiere Pro","DaVinci Resolve","Kdenlive","Shotcut","CapCut","ACDSee Luxea","Lightworks","Clipchamp","OpenShot","Canva","iMovie"]);
+const UPCOMING_APPS = Object.freeze(['Final Cut Pro']);
 
 const PANEL_MIN = Object.freeze({ width: 300, height: 300 });
 const PANEL_MAX = Object.freeze({ width: 1200, height: 1000 });
