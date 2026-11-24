@@ -76,7 +76,19 @@ python launch.py --runner /path/to/llama-server --model /path/to/model.gguf -- \
 
 ## Connect to a hosted backend
 
-From `desktop/`, launch Electron with the HTTPS service address and the same access token the backend uses for `COACH_ACCESS_TOKEN`. In Bash:
+**One-time setup (recommended):**
+
+1. Launch the app normally with `cd desktop && npm start`.
+2. Right-click the pet and open **Settings**.
+3. Enter the **Server address** (the HTTPS URL for your Northflank FastAPI service).
+4. Enter the **Access token** once (the same value configured as `COACH_ACCESS_TOKEN` on Northflank). Click **Save**.
+5. On later launches, simply run `npm start`. The server URL is already saved in `config.json`, while the access token is encrypted separately using Electron's OS keyring support.
+
+You can replace a token by entering a new value in Settings, or select **Forget saved access token** to remove it. The token is **never returned to the HTML renderer, written to config.json, or committed to GitHub**. Electron's main process uses it only as an HTTPS bearer token (or to a loopback localhost server).
+
+On Ubuntu, secure saving requires an unlocked GNOME Keyring or KWallet. If Electron selects its insecure Linux `basic_text` backend, the app **refuses to store** the token and Settings explains that the secure keyring is unavailable. If necessary, continue with the previous environment-variable launch method; avoid plaintext token files in the repository.
+
+**Optional environment overrides (development / insecure keyring fallback):**
 
 ```bash
 read -rsp 'Coach access token: ' EDITING_HELPER_ACCESS_TOKEN
@@ -86,7 +98,7 @@ EDITING_HELPER_API=https://coach.example.com \
 unset EDITING_HELPER_ACCESS_TOKEN
 ```
 
-The launch URL overrides **Server address** for that session and is where Electron sends the bearer token. Start Electron without these variables to use the saved server address again. `GROQ_API_KEY` belongs on the backend.
+`EDITING_HELPER_API` overrides the saved URL for a single launch. `EDITING_HELPER_ACCESS_TOKEN` independently overrides the saved token for that process. The Gemini API key remains on the FastAPI backend, not the desktop.
 
 ## Verification and scope
 
