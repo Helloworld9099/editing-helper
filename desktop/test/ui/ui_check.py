@@ -77,7 +77,7 @@ with sync_playwright() as pw:
     check("panel: minimum window keeps Send visible",
           minimum.evaluate("(() => {const s=document.querySelector('#send').getBoundingClientRect(); return document.documentElement.scrollWidth <= innerWidth && s.bottom <= innerHeight;})()"))
     check("panel: welcome note mentions app and says not verified",
-          "DaVinci Resolve 20.1" in p.inner_text("#log") and "Related official references" in p.inner_text("#log"))
+          "DaVinci Resolve 20.1" in p.inner_text("#log") and "Related references" in p.inner_text("#log"))
     p.evaluate("window.__selectEditor('Kdenlive', '26.08')")
     p.wait_for_timeout(50)
     check("panel: editor label refreshes after Settings change without reopening",
@@ -124,7 +124,7 @@ with sync_playwright() as pw:
     p.wait_for_timeout(100)
     check("panel: source information appears as a button",
           p.locator(".msg.coach .source-link").count() == 1
-          and "Related documentation" in p.inner_text(".msg.coach .source-label"))
+          and "Related references" in p.inner_text(".msg.coach .source-label"))
     p.click(".msg.coach .source-link")
     check("panel: source opens through the restricted native bridge",
           ['openSource', 'https://docs.kdenlive.org/en/transform.html'] in p.evaluate("window.__calls"))
