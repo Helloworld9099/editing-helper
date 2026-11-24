@@ -188,7 +188,28 @@ function parseResponse(status, buf) {
   if (typeof answer !== 'string' || !answer.trim()) {
     return fail('unexpected', 'The server\'s reply had no text "answer" field.');
   }
-  return { ok: true, answer: sanitizeText(answer).trim() };
+  // Source metadata comes from the backend, not from the model's Markdown.
+  // Only intentional HTTPS references can be opened by the native process.
+  const refs = Array.isArray(data.sources) ? data.sources.slice(0, 5) : [];
+  const sources = [];
+  for (const ref of refs) {
+    if (!ref || typeof ref !== 'object' ||
+        typeof ref.title !== 'string' || typeof ref.url !== 'string') continue;
+    if (!ref.title.trim() || ref.title.length > 160 || ref.url.length > 700) continue;
+    let url;
+    try { url = new URL(ref.url); } catch { continue; }
+    if (url.protocol !== 'https:' || !url.hostname || url.username || url.password ||
+        (url.port && url.port !== '443')) continue;
+    sources.push({
+      title: sanitizeText(ref.title).trim(),
+      url: url.href,
+      source_kind: ref.source_kind === 'official' ? 'official' : 'community',
+      version: typeof ref.version === 'string' ? sanitizeText(ref.version).slice(0, 20) : '',
+    });
+  }
+  const output = { ok: true, answer: sanitizeText(answer).trim() };
+  if (sources.length) output.sources = sources;
+  return output;
 }
 
 const OFFLINE_CODES = new Set(['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'EHOSTUNREACH', 'ENETUNREACH', 'ECONNRESET', 'EPIPE', 'ETIMEDOUT']);
