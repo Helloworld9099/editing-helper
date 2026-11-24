@@ -8,7 +8,7 @@ import os
 import re
 import sqlite3
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, unquote, parse_qsl
 
 ROOT = Path(__file__).resolve().parent
 SOURCES_DIR = ROOT / "knowledge" / "sources"
@@ -48,6 +48,29 @@ def valid_url(value: str) -> bool:
     except ValueError:
         return False
 
+
+
+def source_identity(url: str) -> tuple:
+    """Canonical reference key: preserve meaningful chapter/page anchors."""
+    parsed = urlsplit(url.replace("&amp;", "&"))
+    host = (parsed.hostname or "").lower().removeprefix("www.")
+    path = re.sub(r"/+", "/", unquote(parsed.path)).rstrip("/") or "/"
+    if host == "support.apple.com":
+        path = re.sub(r"^/[a-z]{2}(?:-[a-z]{2})?/(guide/)", r"/\1", path)
+        path = re.sub(r"/\d+\.\d+(?:\.\d+)?/(mac|ios|ipados)(?:/[^/]+)?$",
+                      r"/\1", path)
+    if host in {"openshot.org", "cdn.openshot.org"}:
+        host = "openshot.org"
+        path = path.replace("/static/files/user-guide/", "/files/user-guide/")
+    if host == "shotcut.org":
+        path = path.lower()
+    query = tuple(sorted((k, v) for k, v in parse_qsl(parsed.query)
+                         if k.lower() not in {"_v", "fbclid", "sid", "ref"}
+                         and not k.lower().startswith("utm_")))
+    fragment = (parsed.fragment if parsed.fragment
+                and not parsed.fragment.lower().startswith(("main-", "top-", "_r_"))
+                else "")
+    return host, path, query, fragment
 
 def read_notes(folder: Path = SOURCES_DIR) -> list[dict]:
     """Validate original notes and source-link records; exclude unreviewed drafts."""
@@ -186,10 +209,11 @@ def search_notes(question: str, editor: str, version: str = "", *,
     output, seen = [], set()
     # Prefer reviewed notes, leaving room for new documentation discovery links.
     for item in reviewed[:limit] + links:
-        if item["url"] in seen:
+        key = source_identity(item["url"])
+        if key in seen:
             continue
         output.append(item)
-        seen.add(item["url"])
+        seen.add(key)
         if len(output) == limit:
             break
     return output
