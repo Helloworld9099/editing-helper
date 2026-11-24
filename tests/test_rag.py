@@ -99,9 +99,9 @@ class KnowledgeTests(unittest.TestCase):
             host = (url.hostname or "").lower().removeprefix("www.")
             path = re.sub(r"/+", "/", unquote(url.path)).rstrip("/") or "/"
             if host == "support.apple.com":
-                path = re.sub(r"^/[a-z]{2}(?:-[a-z]{2})?/(guide/)", r"/\\1", path)
-                path = re.sub(r"/\\d+\\.\\d+(?:\\.\\d+)?/(mac|ios|ipados)(?:/[^/]+)?$",
-                              r"/\\1", path)
+                path = re.sub(r"^/[a-z]{2}(?:-[a-z]{2})?/(guide/)", r"/\1", path)
+                path = re.sub(r"/\d+\.\d+(?:\.\d+)?/(mac|ios|ipados)(?:/[^/]+)?$",
+                              r"/\1", path)
             if host in {"openshot.org", "cdn.openshot.org"}:
                 host = "openshot.org"
                 path = path.replace("/static/files/user-guide/", "/files/user-guide/")
