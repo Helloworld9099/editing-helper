@@ -6,3 +6,5 @@
 !knowledge/
 !knowledge/sources/
 !knowledge/sources/*.jsonl
+!knowledge/sources/**/
+!knowledge/sources/**/*.jsonl
