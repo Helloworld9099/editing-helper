@@ -71,8 +71,9 @@ test('pet remains 80px and the open chat follows during drag without resizing', 
   }, session: { defaultSession: { setPermissionRequestHandler() {} } } };
   const file = path.join(__dirname, '../src/main.js');
   vm.runInNewContext(fs.readFileSync(file, 'utf8'), { __dirname: path.dirname(file), process,
-    require: (id) => id === 'electron' ? electron : id === './core' ? core : require(id) });
+    require: (id) => id === 'electron' ? electron : id.startsWith('./') ? require(path.join(path.dirname(file), id)) : require(id) });
   await ready;
+  await new Promise(resolve => setImmediate(resolve));
   const [pet, chat] = windows;
   const emit = (win, name, ...args) => ipc.emit(name, { sender: win.webContents }, ...args);
   emit(pet, 'mascot:click');

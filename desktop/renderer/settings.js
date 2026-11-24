@@ -6,6 +6,7 @@
   const $ = (id) => document.getElementById(id);
   const editor = $('editor'), version = $('version'), url = $('url');
   const onTop = $('onTop'), normalMode = $('normalMode');
+  const accessToken = $('accessToken'), forgetToken = $('forgetToken'), tokenHint = $('tokenHint');
   const errorEl = $('error'), infoEl = $('info'), saveBtn = $('save');
   // Closing Settings must work even if configuration retrieval fails.
   $('cancel').addEventListener('click', () => window.close());
@@ -42,6 +43,23 @@
   onTop.checked = cfg.keepOnTop;
   normalMode.checked = cfg.windowMode === 'normal';
 
+  if (cfg.accessTokenSaved) {
+    tokenHint.textContent = 'An encrypted access token is saved on this computer. Leave the field blank to keep it.';
+  } else if (cfg.canSaveAccessToken) {
+    tokenHint.textContent = 'Enter the token once to store it with your operating system keyring.';
+  } else {
+    tokenHint.textContent = 'Secure keyring unavailable. Unlock GNOME Keyring/KWallet to save a token, or use the launch environment variables.';
+    accessToken.disabled = true;
+  }
+  if (cfg.environmentTokenActive) {
+    tokenHint.textContent += ' A launch environment token currently overrides the saved token.';
+  }
+  forgetToken.disabled = !cfg.accessTokenSaved;
+  forgetToken.addEventListener('change', () => {
+    accessToken.disabled = Boolean(forgetToken.checked) || !cfg.canSaveAccessToken;
+    if (forgetToken.checked) accessToken.value = '';
+  });
+
   function warnText(raw) {
     try {
       const u = new URL(raw.trim());
@@ -70,7 +88,11 @@
     errorEl.textContent = '';
     const payload = { editor: editor.value.trim(), editorVersion: version.value, finishSetup: mode === 'setup' };
     if (mode === 'settings') {
-      Object.assign(payload, { apiBaseUrl: url.value, keepOnTop: onTop.checked, windowMode: normalMode.checked ? 'normal' : 'floating' });
+      Object.assign(payload, {
+        apiBaseUrl: url.value, keepOnTop: onTop.checked,
+        windowMode: normalMode.checked ? 'normal' : 'floating',
+        accessToken: accessToken.value, forgetAccessToken: forgetToken.checked,
+      });
     }
     let res;
     try { res = await api.saveConfig(payload); }
@@ -78,7 +100,7 @@
     finally { saving = false; saveBtn.disabled = false; }
     if (!res || !res.ok) {
       const errs = (res && res.errors) || {};
-      errorEl.textContent = errs.editor || errs.apiBaseUrl || errs.form || 'Could not save settings.';
+      errorEl.textContent = errs.editor || errs.apiBaseUrl || errs.accessToken || errs.form || 'Could not save settings.';
       return;
     }
     if (res.restartNeeded) {

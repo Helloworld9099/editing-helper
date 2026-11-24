@@ -100,3 +100,36 @@ class ScreenAnalysisTests(unittest.TestCase):
             self.reply = httpx.Response(200, json={"message": {"content": "Text still works"}})
             self.assertEqual(client.post("/v1/coach", json={"question": "How do I trim?"}).json(),
                              {"answer": "Text still works"})
+
+    def test_visual_terms_retrieve_editor_scoped_sources_without_resending_image(self):
+        import tempfile
+        from pathlib import Path
+        from knowledge_rag import build_index
+
+        with tempfile.TemporaryDirectory() as folder:
+            db = Path(folder) / "index.sqlite3"
+            build_index(database=db)
+            self.reply = httpx.Response(200, json={"candidates": [{"content": {"parts": [
+                {"text": "transform zoom keyframes\nBlocky Minecraft scene in Kdenlive."}
+            ]}}]})
+            with self.client(COACH_RAG_ENABLED="1", COACH_KNOWLEDGE_DB=str(db)) as client:
+                response = client.post(self.path, json={**self.body, "version": "26.08"})
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(len(self.calls), 2)
+            self.assertIn(b"inlineData", self.calls[0].content)
+            self.assertNotIn(b"inlineData", self.calls[1].content)
+            self.assertIn(b"RETRIEVED REFERENCE DATA", self.calls[1].content)
+            refs = response.json()["sources"]
+            self.assertTrue(any("transform" in r["title"].lower() for r in refs))
+            self.assertTrue(all(r["editor"] == "Kdenlive" for r in refs))
+
+            for observation in ["INSUFFICIENT\nBlank image; no distinguishable subject.",
+                                "MISMATCH\nVisible Resolve interface differs from selected Kdenlive."]:
+                self.reply = httpx.Response(200, json={"candidates": [{"content": {
+                    "parts": [{"text": observation}]}}]})
+                count = len(self.calls)
+                with self.client(COACH_RAG_ENABLED="1", COACH_KNOWLEDGE_DB=str(db)) as client:
+                    reply = client.post(self.path, json={**self.body, "question": "Transform zoom?"})
+                self.assertEqual(reply.status_code, 200)
+                self.assertNotIn("sources", reply.json())
+                self.assertEqual(len(self.calls), count + 1)

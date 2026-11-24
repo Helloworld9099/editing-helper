@@ -1,7 +1,8 @@
 'use strict';
-const { app, BrowserWindow, Menu, ipcMain, screen, session } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, screen, session, shell, safeStorage } = require('electron');
 const path = require('node:path');
 const core = require('./core');
+const credentials = require('./credentials');
 
 // Ubuntu defaults to Wayland, where apps cannot position their own windows or reliably stay
 // on top. Running through XWayland (X11) makes dragging and always-on-top work. Set
@@ -16,18 +17,28 @@ const HIDE_MS = 10 * 60 * 1000;
 const forceNormal = process.argv.includes('--normal-window');
 const RENDERER = path.join(__dirname, '..', 'renderer');
 
-let cfgFile;
+let cfgFile, tokenFile;
 let cfg = { ...core.DEFAULTS };
+let savedAccessToken = '';
+let secureTokenStorageAvailable = false;
 let normal = false;            // regular framed windows instead of the borderless pet
 let mascot = null, panel = null, settingsWin = null;
 let captureTool;
+function rememberSources(sources) {
+  if (!Array.isArray(sources)) return;
+  for (const reference of sources) allowedSourceUrls.add(reference.url);
+  while (allowedSourceUrls.size > 256) {
+    allowedSourceUrls.delete(allowedSourceUrls.values().next().value);
+  }
+}
+
 function openCapture() {
   if (!captureTool) {
     captureTool = require('./capture').createCaptureTool(() => ({
-      baseUrl: process.env.EDITING_HELPER_API || cfg.apiBaseUrl,
-      accessToken: process.env.EDITING_HELPER_API ? process.env.EDITING_HELPER_ACCESS_TOKEN : '',
+      ...core.activeConnection(cfg, savedAccessToken),
       editor: cfg.editor, version: cfg.editorVersion, timeoutMs: cfg.timeoutSeconds * 1000,
     }), (reply) => {
+      rememberSources(reply.sources);
       if (!alive(panel)) createPanel();
       const chat = panel.webContents;
       if (chat.isLoadingMainFrame()) {
@@ -42,6 +53,7 @@ function openCapture() {
 }
 
 let busy = false;
+const allowedSourceUrls = new Set();
 let quitting = false;
 let drag = null, panelDrag = null;
 let panelSide = null;
@@ -65,7 +77,12 @@ const persist = () => {
 };
 const isFrom = (e, w) => alive(w) && e.sender === w.webContents;
 const isOurs = (e) => isFrom(e, mascot) || isFrom(e, panel) || isFrom(e, settingsWin);
-const publicConfig = () => ({ ...cfg, normal, supportedApps: core.SUPPORTED_APPS, upcomingApps: core.UPCOMING_APPS });
+const publicConfig = () => ({
+  ...cfg, normal, supportedApps: core.SUPPORTED_APPS, upcomingApps: core.UPCOMING_APPS,
+  accessTokenSaved: Boolean(savedAccessToken),
+  canSaveAccessToken: secureTokenStorageAvailable,
+  environmentTokenActive: Boolean(process.env.EDITING_HELPER_ACCESS_TOKEN),
+});
 
 // ------------------------------------------------------------ mascot
 function clampMascot(x, y, width, height, withChat = panelVisible()) {
@@ -257,7 +274,7 @@ function openSettings(mode = 'settings') {
   if (alive(settingsWin)) { settingsWin.show(); settingsWin.focus(); return; }
   const isSetup = mode === 'setup';
   settingsWin = new BrowserWindow({
-    width: 460, height: isSetup ? 380 : 560, useContentSize: true,
+    width: 460, height: isSetup ? 380 : 650, useContentSize: true,
     title: isSetup ? 'Editing Coach: setup' : 'Editing Coach: settings',
     resizable: false, maximizable: false, minimizable: false, fullscreenable: false,
     autoHideMenuBar: true, backgroundColor: '#ffffff',
@@ -273,21 +290,50 @@ function openSettings(mode = 'settings') {
 
 // -------------------------------------------------------------- IPC
 function registerIpc() {
-  ipcMain.handle('config:get', (e) => (isOurs(e) ? publicConfig() : null));
   ipcMain.handle('panel:open-screen-analysis', (e) => {
     if (!isFrom(e, panel) || e.senderFrame !== e.sender.mainFrame)
       return { ok: false };
     openCapture();
     return { ok: true };
   });
+  ipcMain.handle('config:get', async (e) => {
+    if (!isOurs(e)) return null;
+    // A user may have unlocked their Linux keyring since the app started.
+    if (isFrom(e, settingsWin)) {
+      secureTokenStorageAvailable = await credentials.canStoreToken(safeStorage);
+      if (secureTokenStorageAvailable && !savedAccessToken) {
+        savedAccessToken = await credentials.readToken(tokenFile, safeStorage);
+      }
+    }
+    return publicConfig();
+  });
 
-  ipcMain.handle('config:save', (e, input) => {
+  ipcMain.handle('config:save', async (e, input) => {
     if (!isFrom(e, settingsWin)) return { ok: false, errors: { form: 'Not allowed.' } };
     input = input || {};
     const errors = {};
     const { url, error } = core.validateBaseUrl(input.apiBaseUrl ?? cfg.apiBaseUrl);
     if (error) errors.apiBaseUrl = error;
     if (!core.SUPPORTED_APPS.includes(input.editor)) errors.editor = 'Choose a supported video editor.';
+    const replacementToken = typeof input.accessToken === 'string' ? input.accessToken.trim() : '';
+    const forgetToken = input.forgetAccessToken === true;
+    if (input.accessToken != null && typeof input.accessToken !== 'string') {
+      errors.accessToken = 'Invalid access token.';
+    } else if (replacementToken && (!/^[A-Za-z0-9._~+/=-]+$/.test(replacementToken) || replacementToken.length > 4096)) {
+      errors.accessToken = 'The access token contains invalid characters or is too long.';
+    } else if (replacementToken && forgetToken) {
+      errors.accessToken = 'Choose either to replace or forget the token.';
+    } else if (replacementToken && !secureTokenStorageAvailable) {
+      errors.accessToken = 'Secure system keyring unavailable. Unlock GNOME Keyring or KWallet, then reopen Settings.';
+    }
+    if (!error && savedAccessToken && !forgetToken && !replacementToken &&
+        new URL(url).origin !== new URL(cfg.apiBaseUrl).origin) {
+      errors.accessToken = 'Server host changed. Re-enter the token for that host or choose Forget saved token.';
+    }
+    if (!error && (replacementToken || (!forgetToken && savedAccessToken)) &&
+        !core.isLoopback(new URL(url).hostname) && new URL(url).protocol !== 'https:') {
+      errors.apiBaseUrl = 'Use HTTPS for a hosted server when using an access token.';
+    }
     if (Object.keys(errors).length) return { ok: false, errors };
 
     const windowMode = input.windowMode === 'normal' ? 'normal' : input.windowMode === 'floating' ? 'floating' : cfg.windowMode;
@@ -302,15 +348,38 @@ function registerIpc() {
       windowMode,
       setupDone: cfg.setupDone || (wasSetup && input.finishSetup === true),
     };
-    // Do not report success or update live settings until the new config is persisted.
-    try { core.saveConfig(next, cfgFile); }
-    catch { return { ok: false, errors: { form: 'Could not save settings. Check file permissions and try again.' } }; }
+    // Keep the token in the main process, never return it to the renderer or config.json.
+    try {
+      if (replacementToken) {
+        await credentials.saveToken(tokenFile, replacementToken, safeStorage);
+        savedAccessToken = replacementToken;
+      } else if (forgetToken) {
+        credentials.clearToken(tokenFile);
+        savedAccessToken = '';
+      }
+      core.saveConfig(next, cfgFile);
+    } catch {
+      return { ok: false, errors: { form: 'Could not save connection settings. Check your keyring and file permissions.' } };
+    }
     cfg = next;
     if (!wasSetup && alive(panel)) panel.webContents.send('panel:config-changed');
     if (wasSetup && cfg.setupDone) normal = forceNormal || cfg.windowMode === 'normal';
     for (const w of [mascot, panel]) if (alive(w)) w.setAlwaysOnTop(cfg.keepOnTop, 'floating');
     if (wasSetup && cfg.setupDone) { createMascot(); createPanel(); }   // before setup window closes
     return { ok: true, restartNeeded };
+  });
+
+  ipcMain.handle('source:open', async (e, url) => {
+    if (!isFrom(e, panel) || typeof url !== 'string' || !allowedSourceUrls.has(url)) return false;
+    let parsed;
+    try { parsed = new URL(url); } catch { return false; }
+    if (parsed.protocol !== 'https:' || parsed.username || parsed.password ||
+        (parsed.port && parsed.port !== '443')) return false;
+    try { await shell.openExternal(parsed.href); return true; }
+    catch { return false; }
+  });
+  ipcMain.on('coach:clear-sources', (e) => {
+    if (isFrom(e, panel)) allowedSourceUrls.clear();
   });
 
   ipcMain.handle('coach:ask', async (e, question) => {
@@ -320,10 +389,8 @@ function registerIpc() {
     if (alive(mascot)) mascot.webContents.send('mascot:busy', true);
     let result;
     try {
-      const launchUrl = process.env.EDITING_HELPER_API;
       result = await core.postCoach({
-        baseUrl: launchUrl || cfg.apiBaseUrl,
-        accessToken: launchUrl ? process.env.EDITING_HELPER_ACCESS_TOKEN : '',
+        ...core.activeConnection(cfg, savedAccessToken),
         question,
         editor: cfg.editor,
         version: cfg.editorVersion,
@@ -335,6 +402,7 @@ function registerIpc() {
       busy = false;
       if (alive(mascot)) mascot.webContents.send('mascot:busy', false);
     }
+    rememberSources(result.sources);
     // A reply never raises or focuses a window; if the panel is collapsed it just lights a dot.
     if (result.ok && !panelVisible() && alive(mascot)) mascot.webContents.send('mascot:badge', true);
     return result;
@@ -424,11 +492,16 @@ if (!app.requestSingleInstanceLock()) {
     wc.on('will-navigate', (ev) => ev.preventDefault());
   });
 
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
     session.defaultSession.setPermissionRequestHandler((_wc, _perm, cb) => cb(false));
     Menu.setApplicationMenu(null);
     cfgFile = path.join(app.getPath('userData'), 'config.json');
+    tokenFile = path.join(app.getPath('userData'), 'access-token.enc');
     cfg = core.loadConfig(cfgFile);
+    secureTokenStorageAvailable = await credentials.canStoreToken(safeStorage);
+    if (secureTokenStorageAvailable) {
+      savedAccessToken = await credentials.readToken(tokenFile, safeStorage);
+    }
     normal = forceNormal || cfg.windowMode === 'normal';
     registerIpc();
     screen.on('display-removed', reclampMascot);

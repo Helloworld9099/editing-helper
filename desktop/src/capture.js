@@ -97,7 +97,7 @@ function createCaptureTool(getConnection, onAnswer) {
     });
     if (s.controller.signal.aborted) return { error: 'Analysis canceled.' };
     if (!result.ok) return { error: result.message };
-    onAnswer({ answer: result.answer });
+    onAnswer({ answer: result.answer, sources: result.sources });
     return { ok: true };
   }, 'Could not complete Screen Analysis. Try again.');
   handle('destination', s => ({ destination: s.destination, editor: s.editor, version: s.version }),

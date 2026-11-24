@@ -12,7 +12,7 @@ OUT.mkdir(exist_ok=True)
 STUB = """
 (() => {
   const cfg = Object.assign({setupDone:true, editor:'DaVinci Resolve', editorVersion:'20.1', apiBaseUrl:'http://127.0.0.1:8000',
-    keepOnTop:true, windowMode:'floating', normal:false, supportedApps:['Adobe Premiere Pro','DaVinci Resolve','Kdenlive','Shotcut','CapCut','ACDSee Luxea','Lightworks','Clipchamp','OpenShot','Canva','iMovie'], upcomingApps:['Final Cut Pro']}, %s);
+    keepOnTop:true, windowMode:'floating', normal:false, accessTokenSaved:false, canSaveAccessToken:true, environmentTokenActive:false, supportedApps:['Adobe Premiere Pro','DaVinci Resolve','Kdenlive','Shotcut','CapCut','ACDSee Luxea','Lightworks','Clipchamp','OpenShot','Canva','iMovie'], upcomingApps:['Final Cut Pro']}, %s);
   const calls = []; const listeners = {}; let pending = null;
   window.__calls = calls; window.__closed = false;
   window.close = () => { window.__closed = true; };
@@ -25,6 +25,8 @@ STUB = """
     saveConfig: async (c) => { calls.push(['save', c]); return window.__saveResult; },
     ask: (q) => { calls.push(['ask', q]); return new Promise(r => { pending = r; }); },
     openScreenAnalysis: async () => { calls.push(['openScreenAnalysis']); return {ok:true}; },
+    openSource: async (url) => { calls.push(['openSource', url]); return true; },
+    clearSources: () => calls.push(['clearSources']),
     resizePanel: (...args) => calls.push(['resizePanel', ...args]),
     closePanel: () => calls.push(['closePanel']),
     openSettings: () => calls.push(['openSettings']),
@@ -95,7 +97,7 @@ with sync_playwright() as pw:
           and minimum.input_value("#input") == "Draft question"
           and minimum.evaluate("document.activeElement.id") == "analyze-screen")
     check("panel: welcome note mentions app and says not verified",
-          "DaVinci Resolve 20.1" in p.inner_text("#log") and "aren't checked against sources" in p.inner_text("#log"))
+          "DaVinci Resolve 20.1" in p.inner_text("#log") and "Related references" in p.inner_text("#log"))
     p.evaluate("window.__selectEditor('Kdenlive', '26.08')")
     p.wait_for_timeout(50)
     check("panel: editor label refreshes after Settings change without reopening",
@@ -134,8 +136,21 @@ with sync_playwright() as pw:
     check("panel: no visible Markdown syntax tokens",
           "**Bold instruction**" not in p.inner_text(".msg.coach:last-of-type"))
 
+    p.fill("#input", "how do I use Transform?"); p.press("#input", "Enter")
+    p.evaluate("""window.__resolveAsk({ok:true,answer:'Use Transform [1].',sources:[{
+      title:'Kdenlive Transform Manual', url:'https://docs.kdenlive.org/en/transform.html',
+      source_kind:'official', version:'26.08', review_status:'source_checked'
+    }]})""")
+    p.wait_for_timeout(100)
+    check("panel: source information appears as a button",
+          p.locator(".msg.coach .source-link").count() == 1
+          and "Source-reviewed notes" in p.locator(".msg.coach .source-label").last.text_content())
+    p.click(".msg.coach .source-link")
+    check("panel: source opens through the restricted native bridge",
+          ['openSource', 'https://docs.kdenlive.org/en/transform.html'] in p.evaluate("window.__calls"))
+
     p.fill("#input", "line1"); p.press("#input", "Shift+Enter")
-    check("panel: Shift+Enter makes a newline, doesn't send", "\n" in p.input_value("#input") and names(p).count("ask") == 2)
+    check("panel: Shift+Enter makes a newline, doesn't send", "\n" in p.input_value("#input") and names(p).count("ask") == 3)
     p.fill("#input", "next"); p.press("#input", "Enter")
     p.evaluate("window.__resolveAsk({ok:false, kind:'offline', message:\"Can't reach the coach server at http://127.0.0.1:8000.\"})")
     p.wait_for_timeout(150)
@@ -268,8 +283,12 @@ with sync_playwright() as pw:
     check("setup: window closes after saving", p.evaluate("window.__closed"))
     p.screenshot(path=str(OUT / "setup.png"))
 
-    p, errs = open_page("settings.html", query="?mode=settings", size=(460, 580))
+    p, errs = open_page("settings.html", query="?mode=settings", size=(460, 650))
     check("settings: shows server address, prefilled", p.input_value("#url") == "http://127.0.0.1:8000" and p.is_visible("#url"))
+    check("settings: access token is not prefilled or exposed", p.is_visible("#accessToken") and p.input_value("#accessToken") == ""
+          and not p.is_disabled("#accessToken"))
+    p.fill("#accessToken", "secret-test-token")
+
     check("settings: no warning for loopback http", p.inner_text("#urlWarn") == "")
     p.fill("#url", "http://coach.example.com")
     check("settings: warns about plain http to remote host", "unencrypted" in p.inner_text("#urlWarn"))
@@ -281,9 +300,27 @@ with sync_playwright() as pw:
     p.evaluate("window.__saveResult = {ok:true, restartNeeded:true}")
     p.fill("#url", "https://coach.example.com"); p.select_option("#editor", "ACDSee Luxea"); p.check("#normalMode"); p.click("#save"); p.wait_for_timeout(100)
     last = p.evaluate("window.__calls.filter(c=>c[0]==='save').slice(-1)[0][1]")
-    check("settings: sends URL, keepOnTop, windowMode", last["apiBaseUrl"] == "https://coach.example.com" and last["windowMode"] == "normal" and last["keepOnTop"] is True and last["finishSetup"] is False and last["editor"] == "ACDSee Luxea", last)
+    check("settings: sends URL, access token, keepOnTop, windowMode",
+          last["apiBaseUrl"] == "https://coach.example.com" and last["accessToken"] == "secret-test-token"
+          and last["forgetAccessToken"] is False and last["windowMode"] == "normal"
+          and last["keepOnTop"] is True and last["finishSetup"] is False
+          and last["editor"] == "ACDSee Luxea", last)
     check("settings: restart notice shown when mode changes", "next time you start" in p.inner_text("#info"))
     p.screenshot(path=str(OUT / "settings.png"))
+
+    p, errs = open_page("settings.html", cfg={"accessTokenSaved": True}, query="?mode=settings", size=(460, 650))
+    check("settings: saved credential is never returned to UI",
+          "encrypted access token is saved" in p.inner_text("#tokenHint") and p.input_value("#accessToken") == "")
+    p.check("#forgetToken")
+    check("settings: removing token disables replacement field", p.is_disabled("#accessToken"))
+    p.click("#save"); p.wait_for_timeout(80)
+    payload = p.evaluate("window.__calls.filter(c=>c[0]==='save').slice(-1)[0][1]")
+    check("settings: forget token sends clear intent", payload["forgetAccessToken"] is True and payload["accessToken"] == "")
+
+    p, errs = open_page("settings.html", cfg={"canSaveAccessToken": False},
+                        query="?mode=settings", size=(460, 650))
+    check("settings: unsafe Linux fallback cannot save a token",
+          p.is_disabled("#accessToken") and "keyring unavailable" in p.inner_text("#tokenHint").lower())
     b.close()
 
 print("\nFAILED:" if fails else "\nALL UI CHECKS PASSED", fails if fails else "")

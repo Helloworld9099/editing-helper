@@ -159,6 +159,20 @@ function panelPosition(m, panel, area, gap = 4, margin = 8, preferredSide = null
   return { ...clampToArea(x, y, panel.width, panel.height, area, margin), side };
 }
 
+// A launch override may change the URL or token independently; otherwise use saved values.
+function activeConnection(cfg, savedToken = '', env = process.env) {
+  const baseUrl = env.EDITING_HELPER_API || cfg.apiBaseUrl;
+  // Never silently send an OS-stored token to an overridden, different host.
+  // Explicit env tokens remain intentional and take precedence.
+  let accessToken = env.EDITING_HELPER_ACCESS_TOKEN || '';
+  if (!accessToken && savedToken) {
+    try {
+      if (new URL(baseUrl).origin === new URL(cfg.apiBaseUrl).origin) accessToken = savedToken;
+    } catch { /* invalid URL is reported by postCoach */ }
+  }
+  return { baseUrl, accessToken };
+}
+
 // ------------------------------------------------------------ API client
 function sanitizeText(s) {
   return String(s).replace(/\r\n?/g, '\n').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u2028\u2029]/g, '');
@@ -188,7 +202,30 @@ function parseResponse(status, buf) {
   if (typeof answer !== 'string' || !answer.trim()) {
     return fail('unexpected', 'The server\'s reply had no text "answer" field.');
   }
-  return { ok: true, answer: sanitizeText(answer).trim() };
+  // Source metadata comes from the backend, not from the model's Markdown.
+  // Only intentional HTTPS references can be opened by the native process.
+  const refs = Array.isArray(data.sources) ? data.sources.slice(0, 5) : [];
+  const sources = [];
+  for (const ref of refs) {
+    if (!ref || typeof ref !== 'object' ||
+        typeof ref.title !== 'string' || typeof ref.url !== 'string') continue;
+    if (!ref.title.trim() || ref.title.length > 160 || ref.url.length > 700) continue;
+    let url;
+    try { url = new URL(ref.url); } catch { continue; }
+    if (url.protocol !== 'https:' || !url.hostname || url.username || url.password ||
+        (url.port && url.port !== '443')) continue;
+    sources.push({
+      title: sanitizeText(ref.title).trim(),
+      url: url.href,
+      source_kind: ref.source_kind === 'official' ? 'official' : 'community',
+      review_status: ref.review_status === 'source_checked' ? 'source_checked' : 'link_checked',
+      category: typeof ref.category === 'string' ? sanitizeText(ref.category).slice(0, 50) : 'general',
+      version: typeof ref.version === 'string' ? sanitizeText(ref.version).slice(0, 20) : '',
+    });
+  }
+  const output = { ok: true, answer: sanitizeText(answer).trim() };
+  if (sources.length) output.sources = sources;
+  return output;
 }
 
 const OFFLINE_CODES = new Set(['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'EHOSTUNREACH', 'ENETUNREACH', 'ECONNRESET', 'EPIPE', 'ETIMEDOUT']);
@@ -284,5 +321,5 @@ function postScreenAnalysis({ baseUrl, accessToken, timeoutMs = 90000, signal, o
 module.exports = {
   DEFAULT_API_URL, COACH_PATH, MAX_QUESTION_CHARS, MAX_RESPONSE_BYTES, SUPPORTED_APPS, UPCOMING_APPS, DEFAULTS,
   panelResize, isLoopback, validateBaseUrl, urlWarning, loadConfig, saveConfig,
-  clampToArea, defaultMascotPosition, mascotPositionForBubble, panelPosition, sanitizeText, postCoach, postScreenAnalysis,
+  clampToArea, defaultMascotPosition, mascotPositionForBubble, panelPosition, sanitizeText, activeConnection, postCoach, postScreenAnalysis,
 };

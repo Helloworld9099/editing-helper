@@ -69,6 +69,25 @@ test('rejects access tokens over plain HTTP to non-loopback hosts', async () => 
   assert.match(r.message, /HTTPS/);
 });
 
+test('only HTTPS source references are surfaced to the renderer', () =>
+  withServer((req, res) => json(res, 200, {
+    answer: 'A working answer',
+    sources: [
+      {title: 'Kdenlive Manual', url: 'https://docs.kdenlive.org/en/effects_and_filters.html',
+       source_kind: 'official', version: '26.08'},
+      {title: 'Unsafe', url: 'javascript:alert(1)', source_kind: 'official'},
+      {title: 'Plain HTTP', url: 'http://example.com', source_kind: 'official'},
+      {title: 'Embedded credentials', url: 'https://user:pass@example.com', source_kind: 'official'},
+    ],
+  }), async (s) => {
+    const reply = await core.postCoach({ baseUrl: s.url, question: 'Help with effects' });
+    assert.equal(reply.ok, true);
+    assert.equal(reply.sources.length, 1);
+    assert.equal(reply.sources[0].title, 'Kdenlive Manual');
+    assert.equal(reply.sources[0].source_kind, 'official');
+    assert.equal(reply.sources[0].version, '26.08');
+  }));
+
 test('offline: connection refused', async () => {
   const s = await startServer(() => {});
   const url = s.url; s.srv.close();
@@ -170,6 +189,39 @@ test('config: defaults, roundtrip, atomic write', () => {
   core.saveConfig(c, f);
   assert.deepEqual(core.loadConfig(f), c);
   assert.ok(!fs.existsSync(f + '.tmp'));
+});
+
+test('credentials: normal launch uses persisted URL and token; env can override independently', () => {
+  const cfg = { ...core.DEFAULTS, apiBaseUrl: 'https://saved-service.code.run' };
+  assert.deepEqual(core.activeConnection(cfg, 'saved-token', {}), {
+    baseUrl: 'https://saved-service.code.run',
+    accessToken: 'saved-token',
+  });
+  assert.deepEqual(core.activeConnection(cfg, 'saved-token', { EDITING_HELPER_API: 'https://new-service.code.run' }), {
+    baseUrl: 'https://new-service.code.run',
+    accessToken: '',
+  });
+  assert.deepEqual(core.activeConnection(cfg, 'saved-token', { EDITING_HELPER_API: 'https://saved-service.code.run/preview' }), {
+    baseUrl: 'https://saved-service.code.run/preview',
+    accessToken: 'saved-token',
+  });
+  assert.deepEqual(core.activeConnection(cfg, 'saved-token', { EDITING_HELPER_ACCESS_TOKEN: 'override-token' }), {
+    baseUrl: 'https://saved-service.code.run',
+    accessToken: 'override-token',
+  });
+  assert.deepEqual(core.activeConnection(cfg, 'saved-token', {
+    EDITING_HELPER_API: 'https://new-service.code.run', EDITING_HELPER_ACCESS_TOKEN: 'explicit-token',
+  }), {
+    baseUrl: 'https://new-service.code.run',
+    accessToken: 'explicit-token',
+  });
+});
+
+test('config never stores bearer tokens even when passed extra fields', () => {
+  const f = tmpFile();
+  core.saveConfig({ ...core.DEFAULTS, accessToken: 'secret-never-in-config', editor: 'Kdenlive' }, f);
+  assert.equal(fs.readFileSync(f, 'utf8').includes('secret-never-in-config'), false);
+  assert.equal(core.loadConfig(f).accessToken, undefined);
 });
 
 test('config: corrupt file is set aside and defaults used', () => {

@@ -9,6 +9,8 @@ contextBridge.exposeInMainWorld('coach', {
   saveConfig: (c) => ipcRenderer.invoke('config:save', c),
   ask: (question) => ipcRenderer.invoke('coach:ask', String(question)),
   openScreenAnalysis: () => ipcRenderer.invoke('panel:open-screen-analysis'),
+  openSource: (url) => ipcRenderer.invoke('source:open', String(url)),
+  clearSources: () => ipcRenderer.send('coach:clear-sources'),
   resizePanel: (action, dx, dy) => ipcRenderer.send('panel:resize', action, dx, dy),
   closePanel: () => ipcRenderer.send('panel:close'),
   openSettings: () => ipcRenderer.send('app:open-settings'),

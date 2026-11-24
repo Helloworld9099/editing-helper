@@ -9,3 +9,7 @@ runs/
 models/
 *.gguf
 *.safetensors
+
+# Generated from reviewed documentation notes; rebuild with knowledge_rag.py.
+knowledge/index.sqlite3
+knowledge/index.sqlite3.tmp
