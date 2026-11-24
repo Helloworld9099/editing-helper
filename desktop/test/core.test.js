@@ -205,6 +205,18 @@ test('credentials: normal launch uses persisted URL and token; env can override 
   });
 });
 
+test('public release uses publisher URL, never a shared developer credential', () => {
+  const base = { apiBaseUrl: 'https://editor-api.example.com', authentication: 'user-accounts',
+                 accessToken: 'shared-secret-must-not-leak' };
+  assert.deepEqual(core.managedConnection(base), {
+    baseUrl: 'https://editor-api.example.com',
+    accessToken: '',
+  });
+  assert.match(core.managedConnection({ apiBaseUrl: '', authentication: 'not-configured' }).error, /no public service/);
+  assert.match(core.managedConnection({ apiBaseUrl: 'http://api.example.com', authentication: 'user-accounts' }).error, /no public service/);
+  assert.match(core.managedConnection({ apiBaseUrl: 'https://editor-api.example.com', authentication: 'not-configured' }).error, /Public sign-in/);
+});
+
 test('config never stores bearer tokens even when passed extra fields', () => {
   const f = tmpFile();
   core.saveConfig({ ...core.DEFAULTS, accessToken: 'secret-never-in-config', editor: 'Kdenlive' }, f);
