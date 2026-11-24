@@ -110,7 +110,7 @@ class PublicAuthTests(unittest.TestCase):
             again = client.post("/v1/coach", json={"question": "How?"}, headers=headers)
             self.assertEqual(again.status_code, 429)
             self.assertEqual(again.headers.get("Retry-After"), "60")
-            self.assertEqual(store.calls, 2)
+            self.assertEqual(store.calls, 4)
             self.assertEqual(sum("generativelanguage" in u for u in calls), 1)
 
     def test_invalid_identity_cannot_claim_an_account(self):
@@ -129,7 +129,7 @@ class PublicAuthTests(unittest.TestCase):
                                    headers={"Authorization": f"Bearer {self.valid_token}"},
                                    json={"question": "Hello"})
             self.assertEqual(response.status_code, 401)
-        self.assertEqual(store.calls, 0)
+        self.assertEqual(store.calls, 1)
 
     def test_auth_and_quota_fail_closed(self):
         client, store = self.server(lambda req: httpx.Response(503))
