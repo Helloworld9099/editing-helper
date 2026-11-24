@@ -68,8 +68,8 @@
     function warnText(raw) {
       try {
         const u = new URL(raw.trim());
-        const h = u.hostname.replace(/^\\[|\\]$/g, '').toLowerCase();
-        const loop = h === 'localhost' || h === '::1' || /^127\\.(?:\\d{1,3}\\.){2}\\d{1,3}$/.test(h);
+        const h = u.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+        const loop = h === 'localhost' || h === '::1' || /^127\.(?:\d{1,3}\.){2}\d{1,3}$/.test(h);
         if (u.protocol === 'http:' && !loop) {
           return 'Plain http:// sends your questions unencrypted. Prefer https:// for a hosted server.';
         }
