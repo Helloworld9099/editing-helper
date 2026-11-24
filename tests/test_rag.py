@@ -6,7 +6,7 @@ from pathlib import Path
 
 from knowledge_rag import (
     build_index, matches_version, prompt_context, read_notes,
-    search_notes, valid_url,
+    search_notes, source_identity, valid_url,
 )
 
 
@@ -88,6 +88,22 @@ class KnowledgeTests(unittest.TestCase):
                 docs = search_notes(question, editor, database=self.db)
                 self.assertTrue(docs)
                 self.assertTrue(all(d["editor"] == editor for d in docs))
+
+    def test_canonical_source_identity_ignores_aliases_but_retains_sections(self):
+        self.assertEqual(
+            source_identity("https://www.canva.com/help/animate-designs/"),
+            source_identity("https://www.canva.com/help/animate-designs"))
+        self.assertEqual(
+            source_identity("https://www.openshot.org/static/files/user-guide/animation.html#overview"),
+            source_identity("https://cdn.openshot.org/static/files/user-guide/animation.html#overview"))
+        self.assertEqual(
+            source_identity("https://support.apple.com/en-ie/guide/imovie/movf8b8fc9b2/10.4.6/mac/27"),
+            source_identity("https://support.apple.com/guide/imovie/movf8b8fc9b2/mac"))
+        self.assertNotEqual(
+            source_identity("https://documents.blackmagicdesign.com/UserManuals/Guide.pdf#page=20"),
+            source_identity("https://documents.blackmagicdesign.com/UserManuals/Guide.pdf#page=21"))
+        canva = search_notes("animate designs", "Canva", database=self.db, limit=5)
+        self.assertEqual(len(canva), len({source_identity(d["url"]) for d in canva}))
 
     def test_reviewed_notes_remain_retrievable_with_hundreds_of_catalog_links(self):
         with tempfile.TemporaryDirectory() as folder:
