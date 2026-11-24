@@ -12,7 +12,7 @@ OUT.mkdir(exist_ok=True)
 STUB = """
 (() => {
   const cfg = Object.assign({setupDone:true, editor:'DaVinci Resolve', editorVersion:'20.1', apiBaseUrl:'http://127.0.0.1:8000',
-    keepOnTop:true, windowMode:'floating', normal:false, accessTokenSaved:false, canSaveAccessToken:true, environmentTokenActive:false, supportedApps:['Adobe Premiere Pro','DaVinci Resolve','Kdenlive','Shotcut','CapCut','ACDSee Luxea','Lightworks','Clipchamp','OpenShot','Canva','iMovie'], upcomingApps:['Final Cut Pro']}, %s);
+    keepOnTop:true, windowMode:'floating', normal:false, developerMode:false, accessTokenSaved:false, canSaveAccessToken:true, environmentTokenActive:false, supportedApps:['Adobe Premiere Pro','DaVinci Resolve','Kdenlive','Shotcut','CapCut','ACDSee Luxea','Lightworks','Clipchamp','OpenShot','Canva','iMovie'], upcomingApps:['Final Cut Pro']}, %s);
   const calls = []; const listeners = {}; let pending = null;
   window.__calls = calls; window.__closed = false;
   window.close = () => { window.__closed = true; };
@@ -112,6 +112,8 @@ with sync_playwright() as pw:
           and p.locator(".msg.coach .body code").count() >= 1)
     check("panel: no visible Markdown syntax tokens",
           "**Bold instruction**" not in p.inner_text(".msg.coach:last-of-type"))
+    check("panel: no-documentation footer only says AI guidance",
+          p.locator(".msg.coach .source-foot").last.inner_text().strip() == "AI guidance")
 
     check("panel: reply does not steal focus", p.evaluate("document.activeElement.id") != "input")
     check("panel: draft typed during wait is preserved and Send re-enabled",
@@ -230,7 +232,20 @@ with sync_playwright() as pw:
     check("setup: window closes after saving", p.evaluate("window.__closed"))
     p.screenshot(path=str(OUT / "setup.png"))
 
-    p, errs = open_page("settings.html", query="?mode=settings", size=(460, 650))
+    p, errs = open_page("settings.html", query="?mode=settings", size=(460, 410))
+    check("settings: normal UI hides server address and shared access token",
+          not p.is_visible("#url") and not p.is_visible("#accessToken")
+          and not p.is_visible("#forgetToken") and not p.is_visible("#urlWarn")
+          and "Server address" not in p.inner_text("body"))
+    p.select_option("#editor", "Shotcut")
+    p.click("#save"); p.wait_for_timeout(100)
+    public_payload = p.evaluate("window.__calls.filter(c=>c[0]==='save').slice(-1)[0][1]")
+    check("settings: normal save sends preferences but no connection settings",
+          public_payload["editor"] == "Shotcut"
+          and "apiBaseUrl" not in public_payload and "accessToken" not in public_payload
+          and "forgetAccessToken" not in public_payload)
+
+    p, errs = open_page("settings.html", cfg={"developerMode": True}, query="?mode=settings", size=(460, 650))
     check("settings: shows server address, prefilled", p.input_value("#url") == "http://127.0.0.1:8000" and p.is_visible("#url"))
     check("settings: access token is not prefilled or exposed", p.is_visible("#accessToken") and p.input_value("#accessToken") == ""
           and not p.is_disabled("#accessToken"))
@@ -255,7 +270,7 @@ with sync_playwright() as pw:
     check("settings: restart notice shown when mode changes", "next time you start" in p.inner_text("#info"))
     p.screenshot(path=str(OUT / "settings.png"))
 
-    p, errs = open_page("settings.html", cfg={"accessTokenSaved": True}, query="?mode=settings", size=(460, 650))
+    p, errs = open_page("settings.html", cfg={"developerMode": True, "accessTokenSaved": True}, query="?mode=settings", size=(460, 650))
     check("settings: saved credential is never returned to UI",
           "encrypted access token is saved" in p.inner_text("#tokenHint") and p.input_value("#accessToken") == "")
     p.check("#forgetToken")
@@ -264,7 +279,7 @@ with sync_playwright() as pw:
     payload = p.evaluate("window.__calls.filter(c=>c[0]==='save').slice(-1)[0][1]")
     check("settings: forget token sends clear intent", payload["forgetAccessToken"] is True and payload["accessToken"] == "")
 
-    p, errs = open_page("settings.html", cfg={"canSaveAccessToken": False},
+    p, errs = open_page("settings.html", cfg={"developerMode": True, "canSaveAccessToken": False},
                         query="?mode=settings", size=(460, 650))
     check("settings: unsafe Linux fallback cannot save a token",
           p.is_disabled("#accessToken") and "keyring unavailable" in p.inner_text("#tokenHint").lower())
