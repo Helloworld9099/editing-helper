@@ -63,6 +63,7 @@ class PublicAuthTests(unittest.TestCase):
         if request.url.host == "generativelanguage.googleapis.com":
             assert request.headers["x-goog-api-key"] == "gemini-private-test-key"
             assert "authorization" not in request.headers
+            assert json.loads(request.content)["generationConfig"]["maxOutputTokens"] == 2048
             return httpx.Response(200, json={
                 "candidates": [{"content": {"parts": [{"text": "Use keyframes."}]}}],
             })
