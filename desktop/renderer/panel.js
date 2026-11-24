@@ -180,7 +180,7 @@
     try { cfg = await api.getConfig(); } catch { /* show the generic guidance */ }
     const app = cfg && cfg.editor ? cfg.editor + (cfg.editorVersion ? ' ' + cfg.editorVersion : '') : '';
     const prior = log.querySelector('.note');
-    const note = app ? `Ask about ${app}. Answers aren't checked against sources yet.` : 'Choose your editor in Settings.';
+    const note = app ? `Ask about ${app}. Related official references appear when available; other advice is unverified.` : 'Choose your editor in Settings.';
     if (prior) prior.querySelector('.body').textContent = note;
     else addMessage('note', null, note);
   }
