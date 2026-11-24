@@ -187,6 +187,10 @@ test('credentials: normal launch uses persisted URL and token; env can override 
   });
   assert.deepEqual(core.activeConnection(cfg, 'saved-token', { EDITING_HELPER_API: 'https://new-service.code.run' }), {
     baseUrl: 'https://new-service.code.run',
+    accessToken: '',
+  });
+  assert.deepEqual(core.activeConnection(cfg, 'saved-token', { EDITING_HELPER_API: 'https://saved-service.code.run/preview' }), {
+    baseUrl: 'https://saved-service.code.run/preview',
     accessToken: 'saved-token',
   });
   assert.deepEqual(core.activeConnection(cfg, 'saved-token', { EDITING_HELPER_ACCESS_TOKEN: 'override-token' }), {
