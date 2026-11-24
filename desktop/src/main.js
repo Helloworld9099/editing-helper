@@ -3,6 +3,7 @@ const { app, BrowserWindow, Menu, ipcMain, screen, session, shell, safeStorage }
 const path = require('node:path');
 const core = require('./core');
 const credentials = require('./credentials');
+const releaseConfig = require('./release-config.json');
 
 // Ubuntu defaults to Wayland, where apps cannot position their own windows or reliably stay
 // on top. Running through XWayland (X11) makes dragging and always-on-top work. Set
@@ -15,6 +16,8 @@ app.setPath('userData', path.join(app.getPath('appData'), 'editing-coach'));
 const MASCOT_SIZE = 80;
 const HIDE_MS = 10 * 60 * 1000;
 const forceNormal = process.argv.includes('--normal-window');
+// Settings for your local development environment only. Never available in packaged releases.
+const developerMode = !app.isPackaged && process.env.EDITING_HELPER_DEV_SETTINGS === '1';
 const RENDERER = path.join(__dirname, '..', 'renderer');
 
 let cfgFile, tokenFile;
@@ -48,12 +51,19 @@ const persist = () => {
 };
 const isFrom = (e, w) => alive(w) && e.sender === w.webContents;
 const isOurs = (e) => isFrom(e, mascot) || isFrom(e, panel) || isFrom(e, settingsWin);
-const publicConfig = () => ({
-  ...cfg, normal, supportedApps: core.SUPPORTED_APPS, upcomingApps: core.UPCOMING_APPS,
-  accessTokenSaved: Boolean(savedAccessToken),
-  canSaveAccessToken: secureTokenStorageAvailable,
-  environmentTokenActive: Boolean(process.env.EDITING_HELPER_ACCESS_TOKEN),
-});
+const publicConfig = () => {
+  const { apiBaseUrl: _privateUrl, ...userSettings } = cfg;
+  return {
+    ...userSettings, normal, supportedApps: core.SUPPORTED_APPS,
+    upcomingApps: core.UPCOMING_APPS, developerMode,
+    ...(developerMode ? {
+      apiBaseUrl: cfg.apiBaseUrl,
+      accessTokenSaved: Boolean(savedAccessToken),
+      canSaveAccessToken: secureTokenStorageAvailable,
+      environmentTokenActive: Boolean(process.env.EDITING_HELPER_ACCESS_TOKEN),
+    } : {}),
+  };
+};
 
 // ------------------------------------------------------------ mascot
 function clampMascot(x, y, width, height, withChat = panelVisible()) {
@@ -245,7 +255,7 @@ function openSettings(mode = 'settings') {
   if (alive(settingsWin)) { settingsWin.show(); settingsWin.focus(); return; }
   const isSetup = mode === 'setup';
   settingsWin = new BrowserWindow({
-    width: 460, height: isSetup ? 380 : 650, useContentSize: true,
+    width: 460, height: isSetup ? 380 : (developerMode ? 650 : 480), useContentSize: true,
     title: isSetup ? 'Editing Coach: setup' : 'Editing Coach: settings',
     resizable: false, maximizable: false, minimizable: false, fullscreenable: false,
     autoHideMenuBar: true, backgroundColor: '#ffffff',
@@ -264,7 +274,7 @@ function registerIpc() {
   ipcMain.handle('config:get', async (e) => {
     if (!isOurs(e)) return null;
     // A user may have unlocked their Linux keyring since the app started.
-    if (isFrom(e, settingsWin)) {
+    if (developerMode && isFrom(e, settingsWin)) {
       secureTokenStorageAvailable = await credentials.canStoreToken(safeStorage);
       if (secureTokenStorageAvailable && !savedAccessToken) {
         savedAccessToken = await credentials.readToken(tokenFile, safeStorage);
@@ -276,8 +286,14 @@ function registerIpc() {
   ipcMain.handle('config:save', async (e, input) => {
     if (!isFrom(e, settingsWin)) return { ok: false, errors: { form: 'Not allowed.' } };
     input = input || {};
+    // The renderer may be modified by its user. Enforcement belongs in Electron's main process.
+    if (!developerMode && ['apiBaseUrl', 'accessToken', 'forgetAccessToken']
+        .some(key => Object.prototype.hasOwnProperty.call(input, key))) {
+      return { ok: false, errors: { form: 'Connection settings are only available in developer mode.' } };
+    }
     const errors = {};
-    const { url, error } = core.validateBaseUrl(input.apiBaseUrl ?? cfg.apiBaseUrl);
+    const { url, error } = core.validateBaseUrl(developerMode
+      ? (input.apiBaseUrl ?? cfg.apiBaseUrl) : cfg.apiBaseUrl);
     if (error) errors.apiBaseUrl = error;
     if (!core.SUPPORTED_APPS.includes(input.editor)) errors.editor = 'Choose a supported video editor.';
     const replacementToken = typeof input.accessToken === 'string' ? input.accessToken.trim() : '';
@@ -354,13 +370,18 @@ function registerIpc() {
     if (alive(mascot)) mascot.webContents.send('mascot:busy', true);
     let result;
     try {
-      result = await core.postCoach({
-        ...core.activeConnection(cfg, savedAccessToken),
-        question,
-        editor: cfg.editor,
-        version: cfg.editorVersion,
-        timeoutMs: cfg.timeoutSeconds * 1000,
-      });
+      const connection = app.isPackaged
+        ? core.managedConnection(releaseConfig)
+        : core.activeConnection(cfg, savedAccessToken);
+      result = connection.error
+        ? { ok: false, kind: 'config', message: connection.error }
+        : await core.postCoach({
+          ...connection,
+          question,
+          editor: cfg.editor,
+          version: cfg.editorVersion,
+          timeoutMs: cfg.timeoutSeconds * 1000,
+        });
     } catch {
       result = { ok: false, kind: 'unexpected', message: 'Unexpected problem while contacting the server.' };
     } finally {
@@ -470,9 +491,12 @@ if (!app.requestSingleInstanceLock()) {
     cfgFile = path.join(app.getPath('userData'), 'config.json');
     tokenFile = path.join(app.getPath('userData'), 'access-token.enc');
     cfg = core.loadConfig(cfgFile);
-    secureTokenStorageAvailable = await credentials.canStoreToken(safeStorage);
-    if (secureTokenStorageAvailable) {
-      savedAccessToken = await credentials.readToken(tokenFile, safeStorage);
+    // Legacy developer token storage is never read or sent by a public packaged build.
+    if (!app.isPackaged) {
+      secureTokenStorageAvailable = await credentials.canStoreToken(safeStorage);
+      if (secureTokenStorageAvailable) {
+        savedAccessToken = await credentials.readToken(tokenFile, safeStorage);
+      }
     }
     normal = forceNormal || cfg.windowMode === 'normal';
     registerIpc();

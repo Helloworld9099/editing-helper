@@ -32,9 +32,11 @@ curl -fsS http://127.0.0.1:8000/v1/coach \
   -d '{"question":"Reply with hello."}'
 ```
 
-## Remember hosted desktop connection
+## Developer connection and public distribution
 
-The Electron desktop app can remember your Northflank HTTPS server address and an OS-encrypted bearer token. Open **Settings**, enter **Server address** and **Access token** once, then launch with `cd desktop && npm start` in future sessions. The URL is stored in the user's Electron config; the bearer token is encrypted separately with Electron safeStorage and is never added to `config.json` or the repository. On Linux, the insecure `basic_text` fallback is rejected; unlock GNOME Keyring/KWallet to save credentials. See [desktop/README.md](desktop/README.md#connect-to-a-hosted-backend).
+Normal desktop Settings now hide server URL and shared-token fields. To edit your own Northflank connection locally, launch the unpackaged desktop with `EDITING_HELPER_DEV_SETTINGS=1 npm start`. Your existing saved connection still works with ordinary `npm start`.
+
+For public builds, the API address is publisher-managed, not a user-facing setting, and no shared bearer token is shipped. This repo **does not yet have per-user login and backend authorization**, so packaged public access remains blocked until those are added. See [desktop/PUBLIC_RELEASE.md](desktop/PUBLIC_RELEASE.md) and [desktop/README.md](desktop/README.md).
 
 ## Editor knowledge base (RAG)
 
