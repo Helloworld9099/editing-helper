@@ -49,6 +49,14 @@ Then point Settings back to `http://127.0.0.1:8000` and try your real FastAPI ba
 
 Choose a different editor in Settings and verify that the app remembers the choice after restarting. Repeat a short question with Kdenlive, Adobe Premiere Pro, and one web-based editor (Clipchamp or Canva). Verify that the selected name and optional version reach the mock backend in the returned message. The app provides AI guidance, not verified instructions or direct control of an editing program. The unit tests check all eleven editor names and verify that unsupported values are rejected before making a request.
 
+### Connection Settings and public-release checks
+
+- Launch `npm start` without `EDITING_HELPER_DEV_SETTINGS`: the ordinary Settings screen must not show Server address, Access token, or Forget saved token. Saving editor/window preferences must not change connection configuration.
+- Launch the **unpackaged** app with `EDITING_HELPER_DEV_SETTINGS=1 npm start`: the developer-only connection controls should be visible. The shared token must never be returned by config:get, saved in config.json, or sent to a different overridden host.
+- In an actual **packaged** build, the app must not read local developer tokens, environment token overrides or mutable saved API URLs. The default release-config.json intentionally fails closed because public account authentication is not yet implemented.
+- Verify replies with no RAG references show exactly `AI guidance`; replies with references should retain source buttons.
+- The desktop build and backend do **not** constitute a safe public deployment until the server verifies individual accounts and applies shared-store rate limits/quotas.
+
 ### RAG reference check
 
 With the RAG-enabled Northflank backend, select Kdenlive and optionally version 26.08, then ask about the Broken TV glitch. A related Kdenlive manual reference button should appear; clicking it should open the original HTTPS documentation in the browser only after you click. Test DaVinci Resolve 20 with Dynamic Zoom. An unrelated editor should not show the Kdenlive or Resolve documentation as its own source.
