@@ -6,7 +6,7 @@ h1::before { content: ""; display: inline-block; width: 7px; height: 18px; borde
 label { display: block; font-weight: 680; font-size: 13px; margin: 15px 0 5px; }
 label.check { font-weight: 500; display: flex; gap: 10px; align-items: flex-start; margin: 13px 0 0; line-height: 1.45; }
 label.check input { margin: 3px 0 0; accent-color: var(--accent); flex: 0 0 auto; }
-select, input[type="text"] {
+select, input[type="text"], input[type="password"] {
   width: 100%; min-height: 39px; font: inherit; font-size: 13px; padding: 9px 11px;
   color: var(--text); background: var(--surface); border: 1px solid #c7dad2;
   border-radius: 10px; box-shadow: 0 1px 3px rgba(18,57,52,.035);
@@ -24,7 +24,7 @@ body[data-mode="setup"] form { padding: 16px 22px 18px; }
 body[data-mode="setup"] h1 { font-size: 21px; margin-bottom: 5px; }
 body[data-mode="setup"] .intro { margin: 0 0 10px; font-size: 13px; line-height: 1.45; }
 body[data-mode="setup"] label { margin: 10px 0 3px; }
-body[data-mode="setup"] select, body[data-mode="setup"] input[type="text"] { min-height: 35px; padding: 7px 10px; }
+body[data-mode="setup"] select, body[data-mode="setup"] input[type="text"], body[data-mode="setup"] input[type="password"] { min-height: 35px; padding: 7px 10px; }
 body[data-mode="setup"] p { margin-top: 3px; }
 body[data-mode="setup"] .error { min-height: 0; margin-top: 8px; }
 body[data-mode="setup"] .buttons { margin-top: 10px; }

@@ -159,6 +159,20 @@ function panelPosition(m, panel, area, gap = 4, margin = 8, preferredSide = null
   return { ...clampToArea(x, y, panel.width, panel.height, area, margin), side };
 }
 
+// A launch override may change the URL or token independently; otherwise use saved values.
+function activeConnection(cfg, savedToken = '', env = process.env) {
+  const baseUrl = env.EDITING_HELPER_API || cfg.apiBaseUrl;
+  // Never silently send an OS-stored token to an overridden, different host.
+  // Explicit env tokens remain intentional and take precedence.
+  let accessToken = env.EDITING_HELPER_ACCESS_TOKEN || '';
+  if (!accessToken && savedToken) {
+    try {
+      if (new URL(baseUrl).origin === new URL(cfg.apiBaseUrl).origin) accessToken = savedToken;
+    } catch { /* invalid URL is reported by postCoach */ }
+  }
+  return { baseUrl, accessToken };
+}
+
 // ------------------------------------------------------------ API client
 function sanitizeText(s) {
   return String(s).replace(/\r\n?/g, '\n').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u2028\u2029]/g, '');
@@ -295,5 +309,5 @@ function postCoach({ baseUrl, accessToken = '', question, editor, version, timeo
 module.exports = {
   DEFAULT_API_URL, COACH_PATH, MAX_QUESTION_CHARS, MAX_RESPONSE_BYTES, SUPPORTED_APPS, UPCOMING_APPS, DEFAULTS,
   panelResize, isLoopback, validateBaseUrl, urlWarning, loadConfig, saveConfig,
-  clampToArea, defaultMascotPosition, mascotPositionForBubble, panelPosition, sanitizeText, postCoach,
+  clampToArea, defaultMascotPosition, mascotPositionForBubble, panelPosition, sanitizeText, activeConnection, postCoach,
 };

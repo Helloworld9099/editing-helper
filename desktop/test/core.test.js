@@ -179,6 +179,39 @@ test('config: defaults, roundtrip, atomic write', () => {
   assert.ok(!fs.existsSync(f + '.tmp'));
 });
 
+test('credentials: normal launch uses persisted URL and token; env can override independently', () => {
+  const cfg = { ...core.DEFAULTS, apiBaseUrl: 'https://saved-service.code.run' };
+  assert.deepEqual(core.activeConnection(cfg, 'saved-token', {}), {
+    baseUrl: 'https://saved-service.code.run',
+    accessToken: 'saved-token',
+  });
+  assert.deepEqual(core.activeConnection(cfg, 'saved-token', { EDITING_HELPER_API: 'https://new-service.code.run' }), {
+    baseUrl: 'https://new-service.code.run',
+    accessToken: '',
+  });
+  assert.deepEqual(core.activeConnection(cfg, 'saved-token', { EDITING_HELPER_API: 'https://saved-service.code.run/preview' }), {
+    baseUrl: 'https://saved-service.code.run/preview',
+    accessToken: 'saved-token',
+  });
+  assert.deepEqual(core.activeConnection(cfg, 'saved-token', { EDITING_HELPER_ACCESS_TOKEN: 'override-token' }), {
+    baseUrl: 'https://saved-service.code.run',
+    accessToken: 'override-token',
+  });
+  assert.deepEqual(core.activeConnection(cfg, 'saved-token', {
+    EDITING_HELPER_API: 'https://new-service.code.run', EDITING_HELPER_ACCESS_TOKEN: 'explicit-token',
+  }), {
+    baseUrl: 'https://new-service.code.run',
+    accessToken: 'explicit-token',
+  });
+});
+
+test('config never stores bearer tokens even when passed extra fields', () => {
+  const f = tmpFile();
+  core.saveConfig({ ...core.DEFAULTS, accessToken: 'secret-never-in-config', editor: 'Kdenlive' }, f);
+  assert.equal(fs.readFileSync(f, 'utf8').includes('secret-never-in-config'), false);
+  assert.equal(core.loadConfig(f).accessToken, undefined);
+});
+
 test('config: corrupt file is set aside and defaults used', () => {
   const f = tmpFile(); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, '{nope');
   assert.deepEqual(core.loadConfig(f), core.DEFAULTS);
