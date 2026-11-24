@@ -24,6 +24,8 @@ STUB = """
     getConfig: async () => cfg,
     saveConfig: async (c) => { calls.push(['save', c]); return window.__saveResult; },
     ask: (q) => { calls.push(['ask', q]); return new Promise(r => { pending = r; }); },
+    openSource: async (url) => { calls.push(['openSource', url]); return true; },
+    clearSources: () => calls.push(['clearSources']),
     resizePanel: (...args) => calls.push(['resizePanel', ...args]),
     closePanel: () => calls.push(['closePanel']),
     openSettings: () => calls.push(['openSettings']),
@@ -114,6 +116,19 @@ with sync_playwright() as pw:
     check("panel: reply does not steal focus", p.evaluate("document.activeElement.id") != "input")
     check("panel: draft typed during wait is preserved and Send re-enabled",
           not p.is_disabled("#send") and p.input_value("#input") == "second question" and p.inner_text("#status") == "")
+    p.fill("#input", "how do I use Transform?"); p.press("#input", "Enter")
+    p.evaluate("""window.__resolveAsk({ok:true,answer:'Use Transform [1].',sources:[{
+      title:'Kdenlive Transform Manual', url:'https://docs.kdenlive.org/en/transform.html',
+      source_kind:'official', version:'26.08'
+    }]})""")
+    p.wait_for_timeout(100)
+    check("panel: source information appears as a button",
+          p.locator(".msg.coach .source-link").count() == 1
+          and "Related documentation" in p.inner_text(".msg.coach .source-label"))
+    p.click(".msg.coach .source-link")
+    check("panel: source opens through the restricted native bridge",
+          ['openSource', 'https://docs.kdenlive.org/en/transform.html'] in p.evaluate("window.__calls"))
+
     p.fill("#input", "line1"); p.press("#input", "Shift+Enter")
     check("panel: Shift+Enter makes a newline, doesn't send", "\n" in p.input_value("#input") and names(p).count("ask") == 1)
     p.fill("#input", "next"); p.press("#input", "Enter")
