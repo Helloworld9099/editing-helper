@@ -184,9 +184,9 @@ function managedConnection(releaseConfig) {
   if (releaseConfig.authentication !== 'user-accounts') {
     return { error: 'Public sign-in is not configured yet. This build cannot use the private developer server.' };
   }
-  // No shared bearer secret is ever embedded into the distributable desktop app.
-  // The backend still must verify individual user sessions before public access works.
-  return { baseUrl: url, accessToken: '' };
+  // Future authentication flow must return a verified user session here.
+  // Until then, fail closed rather than sending anonymous requests to a billed Gemini API.
+  return { error: 'Public account sign-in is not implemented in this build.' };
 }
 
 // ------------------------------------------------------------ API client
