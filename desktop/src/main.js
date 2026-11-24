@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, Menu, ipcMain, screen, session } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, screen, session, shell } = require('electron');
 const path = require('node:path');
 const core = require('./core');
 
@@ -21,6 +21,7 @@ let cfg = { ...core.DEFAULTS };
 let normal = false;            // regular framed windows instead of the borderless pet
 let mascot = null, panel = null, settingsWin = null;
 let busy = false;
+const allowedSourceUrls = new Set();
 let quitting = false;
 let drag = null, panelDrag = null;
 let panelSide = null;
@@ -286,6 +287,19 @@ function registerIpc() {
     return { ok: true, restartNeeded };
   });
 
+  ipcMain.handle('source:open', async (e, url) => {
+    if (!isFrom(e, panel) || typeof url !== 'string' || !allowedSourceUrls.has(url)) return false;
+    let parsed;
+    try { parsed = new URL(url); } catch { return false; }
+    if (parsed.protocol !== 'https:' || parsed.username || parsed.password ||
+        (parsed.port && parsed.port !== '443')) return false;
+    try { await shell.openExternal(parsed.href); return true; }
+    catch { return false; }
+  });
+  ipcMain.on('coach:clear-sources', (e) => {
+    if (isFrom(e, panel)) allowedSourceUrls.clear();
+  });
+
   ipcMain.handle('coach:ask', async (e, question) => {
     if (!isFrom(e, panel)) return { ok: false, kind: 'unexpected', message: 'Not allowed.' };
     if (busy) return { ok: false, kind: 'busy', message: 'Still working on your last question.' };
@@ -307,6 +321,15 @@ function registerIpc() {
     } finally {
       busy = false;
       if (alive(mascot)) mascot.webContents.send('mascot:busy', false);
+    }
+    if (result.ok && Array.isArray(result.sources)) {
+      for (const reference of result.sources) {
+        allowedSourceUrls.add(reference.url);
+      }
+      // Bound memory if someone leaves the pet running for an extended session.
+      while (allowedSourceUrls.size > 256) {
+        allowedSourceUrls.delete(allowedSourceUrls.values().next().value);
+      }
     }
     // A reply never raises or focuses a window; if the panel is collapsed it just lights a dot.
     if (result.ok && !panelVisible() && alive(mascot)) mascot.webContents.send('mascot:badge', true);
