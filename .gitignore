@@ -13,3 +13,6 @@ models/
 # Generated from reviewed documentation notes; rebuild with knowledge_rag.py.
 knowledge/index.sqlite3
 knowledge/index.sqlite3.tmp
+
+# Local Electron installer candidates and temporary release artifacts.
+desktop/dist/
