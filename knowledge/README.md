@@ -1,68 +1,138 @@
-# Editing Helper knowledge base (RAG)
+# Editing Helper — organized documentation and forum knowledge
 
-This is a reviewed-notes index, not a model fine-tuning dataset or a forum scraper. It adds editor-specific reference context to the existing Gemini / Groq / local-model API using SQLite FTS5, which requires no new paid service.
+The AI uses an offline SQLite FTS5 index built from **original, short, source-attributed notes and document links**. It never needs to download an entire forum at question time. The selected editor is an exact search filter; version tags prevent known-incompatible notes from being used as evidence.
 
-## Current coverage
+## Coverage snapshot — November 24, 2026
 
-- **DaVinci Resolve 20**: 7 short original notes with official Blackmagic Design links (Dynamic Zoom, animation, stabilization, color, Fusion, export and audio).
-- **Kdenlive 26.08**: 7 short original notes with official Kdenlive manual links (cutting, transforms, position/zoom compatibility, effects, animation, glitch effects and timeline tools).
-- **The other nine selectable editors**: no notes yet; Gemini can still answer, but those answers are not grounded in this knowledge index.
+| Editing software | All records | Source-reviewed notes | Link-only references |
+| --- | ---: | ---: | ---: |
+| Adobe Premiere Pro | 428 | 3 | 425 |
+| DaVinci Resolve | 49 | 7 | 42 |
+| Kdenlive | 252 | 7 | 245 |
+| Shotcut | 302 | 4 | 298 |
+| CapCut | 104 | 5 | 99 |
+| ACDSee Luxea | 36 | 5 | 31 |
+| Lightworks | 74 | 3 | 71 |
+| Clipchamp | 36 | 4 | 32 |
+| OpenShot | 20 | 6 | 14 |
+| Canva | 32 | 5 | 27 |
+| iMovie (Mac) | 44 | 6 | 38 |
+| **Total** | **1,377** | **55** | **1,322** |
 
-Source-checked means a documentation source was inspected, **not** that every step was executed inside the editor. The notes are original paraphrases rather than copied manuals.
+**Do not treat these as 1,377 verified tutorials.** The 55 source-reviewed notes are original concise paraphrases of individual techniques; they have NOT all been physically executed in their editors. The 1,322 link-only records are a searchable, editor-specific *directory* of relevant official guides or public forum discussions, not extracted article bodies or proofs of particular steps. This split prevents a forum title from becoming a false instruction.
 
-## Add forum discussions or official documents
+The source index covers **all 11 editors**. Coverage varies widely by vendor, and the count is a snapshot—not a claim that every available page or forum was found.
 
-1. Find a real editing problem and relevant official documentation. Use community forum solutions as supplementary material.
-2. Check the source's terms and any applicable permission or license. A public webpage does not automatically permit bulk scraping, redistributing text, or training a model on it. Do not add personal information, entire forum threads, private posts or copied tutorial chapters.
-3. Write your **own concise summary** of the actual technique, version applicability, limitations, and important controls. Link to the original source.
-4. Add one JSON object per line to a file inside knowledge/sources/. Use this schema:
+## Storage structure
 
-~~~json
+```text
+knowledge/
+  sources/
+    resolve20.jsonl                # reviewed DaVinci Resolve 20 summaries
+    kdenlive26.jsonl               # reviewed Kdenlive 26.08 summaries
+    premiere-pro/
+      official-links.jsonl
+      community-links.jsonl
+      reviewed-notes.jsonl
+    davinci-resolve/
+      official-links.jsonl
+      community-links.jsonl
+    kdenlive/
+      official-links.jsonl
+      community-links.jsonl
+    shotcut/
+      documentation-links.jsonl   # official links + community-hosted docs
+      reviewed-notes.jsonl
+    capcut/
+      official-links.jsonl
+      reviewed-notes.jsonl
+    luxea/
+      official-links.jsonl
+      community-links.jsonl
+      reviewed-notes.jsonl
+    lightworks/
+      official-links.jsonl
+      community-links.jsonl
+      reviewed-notes.jsonl
+    clipchamp/
+      official-links.jsonl
+      reviewed-notes.jsonl
+    openshot/
+      official-links.jsonl
+      reviewed-notes.jsonl
+    canva/
+      official-links.jsonl
+      reviewed-notes.jsonl
+    imovie/
+      official-links.jsonl
+      reviewed-notes.jsonl
+  index.sqlite3                     # generated, not committed
+```
+
+Every record also has a **category** such as timeline, keyframes, effects, transitions, audio, color, captions, export, performance, media or troubleshooting. Files are sorted by category and then title wherever possible. The index stores editor, version, category, title, keywords, note, source URL, kind (official/community), and review status.
+
+### Evidence levels
+
+- `source_checked`: An original paraphrase grounded in an inspected source. It can be supplied as an answer reference when relevant; it is **not** a claim that we tested the editor UI.
+- `link_checked`: A catalog entry from source-link discovery. It helps the AI locate related documentation, **but must never be used as proof of specific buttons or steps**.
+- `needs_review`: Newly added or unchecked material. The indexer **excludes** these records until reviewed.
+
+Sources are **not** copied or mirrored in full. Forum posts may be inaccurate, outdated, contradictory, subject to access terms, or contain personal information. Link indexing does not grant permission to reproduce thread bodies or train on them.
+
+## Explore and rebuild the index
+
+From the repository root:
+
+```bash
+python3 knowledge_rag.py validate
+python3 knowledge_rag.py stats
+python3 knowledge_rag.py build
+
+python3 knowledge_rag.py search --editor Kdenlive --version 26.08 "Broken TV glitch"
+python3 knowledge_rag.py search --editor "Adobe Premiere Pro" "How do I animate a zoom?"
+python3 knowledge_rag.py search --editor "ACDSee Luxea" --version 8 "Chroma Key"
+python3 -m unittest discover -s tests -v
+```
+
+The search command returns the original URL, category, source type, version, and evidence level. The desktop displays "Source-reviewed notes" and "Further reading (links only)" separately.
+
+## Adding new articles, forum solutions, or versions
+
+1. Find an **actual source**. Prefer current official manuals for control names and UI steps; check community discussions for workarounds and observed failures.
+2. Verify the page and its editor/version. Check permission or licensing conditions. Do not paste entire manuals, transcripts, forum conversations, emails, or personal details into the repository.
+3. Write your **own short summary**, recording what the source actually supports. Mark it `needs_review` until checked. Use `link_checked` for navigation metadata that does not establish the steps.
+4. Add an entry to that editor's JSONL file, with these fields:
+
+```json
 {
-  "id": "kdenlive-example-note",
+  "id": "kdenlive-example-minecraft-zoom",
   "editor": "Kdenlive",
   "version": "26.08",
-  "title": "An original descriptive title",
-  "keywords": ["glitch", "minecraft", "keyframe", "cut"],
-  "note": "Your own reviewed original summary of the solution goes here. Include practical steps and limitations.",
-  "source_url": "https://example.org/original-thread",
+  "category": "keyframes",
+  "title": "Example: animating a zoom with Transform",
+  "keywords": ["transform", "zoom", "minecraft", "keyframe"],
+  "note": "An original, 30+ character summary based on the actual source goes here. Check that version and its controls before review.",
+  "source_url": "https://example.org/replace-with-a-real-document",
   "source_kind": "community",
   "review_status": "needs_review",
   "rights_basis": "original_paraphrase"
 }
-~~~
+```
 
-This is a template, **not a real sourced tutorial**. Set review_status to source_checked only after verifying the reference and rights. Entries still marked needs_review are deliberately excluded from the search index.
+   This example is **not** a real sourced note. `version: "*"` means the document is not pinned to a version, **not** that its instructions are known to work in every release.
 
-5. From the repository root, validate and preview retrieval:
+5. Run `python3 knowledge_rag.py validate`, `stats`, `build`, and editor-specific `search` commands. Verify the source-checked entries in the target editor when possible; remove or update any false steps.
+6. Commit JSONL changes (not the generated SQLite file), merge, and redeploy Northflank. The Docker build automatically regenerates the index. No paid embedding API or vector database is needed.
 
-~~~bash
-python3 knowledge_rag.py validate
-python3 knowledge_rag.py build
-python3 knowledge_rag.py search --editor Kdenlive --version 26.08 "How do I add a broken TV glitch?"
-~~~
+## Retrieval and safety
 
-6. Test an answer in the actual editor, compare against the cited reference, and fix or remove incorrect guidance.
-7. Commit the JSONL and Python changes. Do not commit knowledge/index.sqlite3; Docker generates it when redeploying.
+The API retrieves at most three results for a question. It favors source-reviewed, editor-compatible notes while deduplicating source URLs. Link-only entries are supplied as **further reading**, not procedural proof. Kdenlive knowledge is never mixed into Resolve prompts; inappropriate versions are rejected for version-pinned notes. Forum excerpts are not embedded as model instructions.
 
-## Northflank deployment
+The desktop displays official/community labels and opens only user-clicked HTTPS source links through Electron's native bridge. Answers without matching sources still use Gemini, but must not claim that a reference was found.
 
-The root Dockerfile builds the SQLite index from the approved notes before starting FastAPI. The image enables retrieval with COACH_RAG_ENABLED=1, so no new API keys or hosted database are required.
+## Important limits
 
-Optional environment settings:
-
-- COACH_RAG_ENABLED=0 disables retrieval.
-- COACH_RAG_ENABLED=1 requires a prebuilt index. Locally, run python3 knowledge_rag.py build first.
-- COACH_KNOWLEDGE_DB=/path/to/index.sqlite3 overrides the index path.
-
-Keep your existing COACH_PROVIDER, COACH_MODEL, GEMINI_API_KEY, COACH_ACCESS_TOKEN and COACH_ALLOWED_HOSTS values. Do not store secrets in source notes.
-
-## How the AI uses this
-
-For each question, the backend searches the local index by selected editor and version, retrieves up to three relevant notes, and sends them to the model labeled **untrusted reference data**. The model is instructed to avoid invented controls and irrelevant suggestions for stylized/game footage. Optional source metadata is returned to the desktop, which offers links to the original documentation.
-
-No matching notes means no fabricated citations; the AI can still answer without references. Version-incompatible Kdenlive or DaVinci Resolve notes are excluded instead of silently reused.
-
-## Limits
-
-FTS5 keyword matching is an affordable starting point; it is not guaranteed to understand synonyms, source quality or every question. The 14 notes are only a seed set. Audit accuracy in the target editor and compare answers with and without RAG before scaling. Screen analysis, clip/video uploads, conversation memory and automatic forum importing are separate future capabilities.
+- The knowledge system uses lexical FTS5 search, not semantic embeddings. Synonyms, jargon and long natural-language queries can miss relevant entries.
+- The 55 source-reviewed notes do not cover every editor feature. The 1,322 catalog links are discoverable sources, not detailed instructions.
+- Original documentation may change; these records should be reviewed periodically against the publisher's current version.
+- User screen analysis, clip analysis, conversation memory, automatic forum crawling, and physically verified tutorials are separate future functionality.
