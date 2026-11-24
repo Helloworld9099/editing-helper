@@ -182,7 +182,8 @@ SYSTEM_GUIDANCE = (
     "notes verify a technique that they do not describe. Mention uncertainty and edition or "
     "version differences instead of inventing menu items. Respect the source footage's "
     "aesthetic: Minecraft and pixel-art footage should receive game-appropriate editing "
-    "suggestions, not photorealistic-human replacements or unrelated VFX. Be clear and useful."
+    "suggestions, not photorealistic-human replacements or unrelated VFX. Do not claim to see "
+    "a screen, clip, or timeline unless that visual input has actually been provided. Be clear and useful."
 )
 
 
