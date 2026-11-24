@@ -54,19 +54,27 @@
       const foot = document.createElement('div');
       foot.className = 'source-foot';
       if (refs.length) {
-        const label = document.createElement('div');
-        label.className = 'source-label';
-        label.textContent = 'Related references';
-        foot.appendChild(label);
-        for (const ref of refs) {
-          const button = document.createElement('button');
-          button.className = 'source-link';
-          button.type = 'button';
-          button.textContent = (ref.source_kind === 'official' ? 'Official: ' : 'Community: ') + ref.title;
-          button.title = 'Open original reference in your browser';
-          button.setAttribute('aria-label', 'Open source: ' + ref.title);
-          button.addEventListener('click', () => { void api.openSource(ref.url); });
-          foot.appendChild(button);
+        const reviewed = refs.filter(ref => ref.review_status === 'source_checked');
+        const linkOnly = refs.filter(ref => ref.review_status !== 'source_checked');
+        for (const [group, labelText] of [
+          [reviewed, 'Source-reviewed notes'],
+          [linkOnly, 'Further reading (links only)'],
+        ]) {
+          if (!group.length) continue;
+          const label = document.createElement('div');
+          label.className = 'source-label';
+          label.textContent = labelText;
+          foot.appendChild(label);
+          for (const ref of group) {
+            const button = document.createElement('button');
+            button.className = 'source-link';
+            button.type = 'button';
+            button.textContent = (ref.source_kind === 'official' ? 'Official: ' : 'Community: ') + ref.title;
+            button.title = 'Open original reference in your browser';
+            button.setAttribute('aria-label', 'Open source: ' + ref.title);
+            button.addEventListener('click', () => { void api.openSource(ref.url); });
+            foot.appendChild(button);
+          }
         }
       } else {
         foot.textContent = 'AI guidance · no matching documentation found';
