@@ -255,7 +255,7 @@ function openSettings(mode = 'settings') {
   if (alive(settingsWin)) { settingsWin.show(); settingsWin.focus(); return; }
   const isSetup = mode === 'setup';
   settingsWin = new BrowserWindow({
-    width: 460, height: isSetup ? 380 : (developerMode ? 650 : 410), useContentSize: true,
+    width: 460, height: isSetup ? 380 : (developerMode ? 650 : 480), useContentSize: true,
     title: isSetup ? 'Editing Coach: setup' : 'Editing Coach: settings',
     resizable: false, maximizable: false, minimizable: false, fullscreenable: false,
     autoHideMenuBar: true, backgroundColor: '#ffffff',
@@ -378,10 +378,10 @@ function registerIpc() {
         : await core.postCoach({
           ...connection,
           question,
-        editor: cfg.editor,
-        version: cfg.editorVersion,
-        timeoutMs: cfg.timeoutSeconds * 1000,
-      });
+          editor: cfg.editor,
+          version: cfg.editorVersion,
+          timeoutMs: cfg.timeoutSeconds * 1000,
+        });
     } catch {
       result = { ok: false, kind: 'unexpected', message: 'Unexpected problem while contacting the server.' };
     } finally {
