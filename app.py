@@ -11,6 +11,8 @@ from fastapi.security import HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from screen_analysis import register_screen_analysis
+
 OLLAMA_CHAT = "http://127.0.0.1:11434/api/chat"
 LLAMA_CHAT = "http://127.0.0.1:8081/v1/chat/completions"
 GROQ_CHAT = "https://api.groq.com/openai/v1/chat/completions"
@@ -111,6 +113,7 @@ def create_app(*, model=None, timeout=60.0, transport=None, provider=None):
 
     @asynccontextmanager
     async def lifespan(api):
+        api.state.vision_slot = asyncio.Semaphore(1)
         api.state.slot = asyncio.Semaphore(1)
         async with httpx.AsyncClient(
             transport=transport, trust_env=False, follow_redirects=False, timeout=timeout
@@ -173,6 +176,7 @@ def create_app(*, model=None, timeout=60.0, transport=None, provider=None):
                 raise HTTPException(502, f"Could not read a valid reply from {engine}.") from None
         return CoachReply(answer=answer)
 
+    register_screen_analysis(api, require_access_token, GEMINI_GENERATE, gemini_answer, timeout, access_token)
     return api
 
 

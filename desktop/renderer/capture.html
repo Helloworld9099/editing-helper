@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src data:">
+  <title>Review screenshot</title>
+  <link rel="stylesheet" href="shared.css">
+  <link rel="stylesheet" href="capture.css">
+</head>
+<body>
+<main>
+  <h1>Review screenshot</h1>
+  <section id="choose">
+    <p>Choose what you want the coach to see.</p>
+    <div class="row">
+      <button data-source="screen" class="ghost">Choose display</button>
+      <button data-source="window" class="ghost">Choose window</button>
+      <button id="browse" class="ghost">Open screenshot…</button>
+      <input hidden type="file" id="file" accept="image/png,image/jpeg">
+    </div>
+    <label id="picker" hidden>Capture source <select id="sources"></select>
+      <button id="take" class="ghost">Capture</button>
+    </label>
+  </section>
+  <section id="review" hidden>
+    <img id="preview" alt="Screenshot selected for analysis">
+    <p id="dimensions"></p>
+    <details id="crop">
+      <summary>Crop to a region</summary>
+      <p>Set the top-left corner and size in image pixels.</p>
+      <div class="row">
+        <label>Left <input id="left" type="number" min="0"></label>
+        <label>Top <input id="top" type="number" min="0"></label>
+        <label>Width <input id="width" type="number" min="1"></label>
+        <label>Height <input id="height" type="number" min="1"></label>
+        <button class="ghost" id="apply">Apply crop</button>
+      </div>
+    </details>
+    <p id="privacy"></p>
+    <div class="row">
+      <button class="primary" id="send">Analyze Screenshot</button>
+      <button class="ghost" id="retake">Retake</button>
+    </div>
+  </section>
+  <p role="status" id="status"></p>
+  <div id="answer"></div>
+  <button class="ghost" id="cancel">Cancel</button>
+</main>
+<script src="capture.js"></script>
+</body>
+</html>

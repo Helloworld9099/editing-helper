@@ -1,0 +1,12 @@
+main { max-width: 900px; margin: auto; padding: clamp(16px, 4vw, 32px); }
+h1 { font-size: 1.6rem; margin: 0 0 12px; }
+section { padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.row { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; }
+#picker { margin-top: 12px; }
+#picker:not([hidden]) { display: block; }
+select { max-width: 100%; }
+#preview { display: block; width: auto; height: auto; max-width: 100%; max-height: 50vh; margin: auto; }
+input[type=number] { display: block; width: 6em; padding: 4px; }
+summary { cursor: pointer; }
+#privacy, #dimensions { color: var(--muted); }
+#answer { white-space: pre-wrap; overflow-wrap: anywhere; margin-bottom: 12px; }

@@ -45,7 +45,7 @@ def run(args):
             except OSError as exc:
                 raise RuntimeError(f"Port {port} is unavailable. Stop the old demo first.") from exc
     hosted_settings = {"COACH_ACCESS_TOKEN", "COACH_REQUIRE_AUTH", "COACH_ALLOWED_HOSTS",
-                       "EDITING_HELPER_ACCESS_TOKEN", "GROQ_API_KEY"}
+                       "EDITING_HELPER_ACCESS_TOKEN", "GROQ_API_KEY", "GEMINI_API_KEY"}
     clean_env = {k: v for k, v in os.environ.items()
                  if not k.startswith("LLAMA_") and k not in hosted_settings}
     processes = []
@@ -57,6 +57,8 @@ def run(args):
         ], cwd=runner.parent, env=clean_env))
         wait_ready(processes[-1], "http://127.0.0.1:8081/health", 180)
         api_env = dict(clean_env, COACH_PROVIDER="llama.cpp", COACH_MODEL="editing-helper-local")
+        if os.environ.get("GEMINI_API_KEY"):
+            api_env["GEMINI_API_KEY"] = os.environ["GEMINI_API_KEY"]
         processes.append(subprocess.Popen([
             sys.executable, "-m", "uvicorn", "app:app", "--host", "127.0.0.1",
             "--port", "8000", "--no-proxy-headers",

@@ -200,28 +200,33 @@ const OFFLINE_CODES = new Set(['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'EHOSTU
  * No proxies, no redirects followed, response size capped.
  */
 function postCoach({ baseUrl, accessToken = '', question, editor, version, timeoutMs = 90000 }) {
+  const fail = (kind, message) => Promise.resolve({ ok: false, kind, message });
+  const q = String(question ?? '').trim();
+  if (!q) return fail('empty', 'Type a question first.');
+  if (q.length > MAX_QUESTION_CHARS) return fail('empty', `That question is too long (limit ${MAX_QUESTION_CHARS} characters).`);
+  const payload = { question: q };
+  if (editor != null) {
+    if (!SUPPORTED_APPS.includes(editor)) return fail('config', 'Choose a supported editor in Settings.');
+    payload.editor = editor;
+    const v = sanitizeText(String(version ?? '')).trim().slice(0, 40);
+    if (v) payload.version = v;
+  }
+  return postJson({ baseUrl, accessToken, timeoutMs, endpoint: COACH_PATH, payload });
+}
+
+function postJson({ baseUrl, accessToken = '', timeoutMs, endpoint, payload, signal }) {
   return new Promise((resolve) => {
     const fail = (kind, message) => resolve({ ok: false, kind, message });
-    const q = String(question ?? '').trim();
-    if (!q) return fail('empty', 'Type a question first.');
-    if (q.length > MAX_QUESTION_CHARS) return fail('empty', `That question is too long (limit ${MAX_QUESTION_CHARS} characters).`);
     const { url: base, error } = validateBaseUrl(baseUrl);
     if (error) return fail('config', `Server address problem: ${error}`);
 
-    const target = new URL(base + COACH_PATH);
+    const target = new URL(base + endpoint);
     const token = accessToken.trim();
     if (token && !/^[A-Za-z0-9._~+/=-]+$/.test(token)) {
       return fail('config', 'The configured coach access token is invalid.');
     }
-    if (token && target.protocol !== 'https:' && !isLoopback(target.hostname)) {
-      return fail('config', 'Use HTTPS to send a coach access token to a hosted server.');
-    }
-    const payload = { question: q };
-    if (editor != null) {
-      if (!SUPPORTED_APPS.includes(editor)) return fail('config', 'Choose a supported editor in Settings.');
-      payload.editor = editor;
-      const v = sanitizeText(String(version ?? '')).trim().slice(0, 40);
-      if (v) payload.version = v;
+    if ((token || endpoint === '/v1/screen-analysis') && target.protocol !== 'https:' && !isLoopback(target.hostname)) {
+      return fail('config', 'Use HTTPS to send credentials or screenshots to a hosted server.');
     }
     const body = Buffer.from(JSON.stringify(payload));
     const headers = { 'Content-Type': 'application/json', 'Content-Length': body.length, Accept: 'application/json' };
@@ -233,7 +238,7 @@ function postCoach({ baseUrl, accessToken = '', question, editor, version, timeo
     let timer;
     const finish = (r) => { if (done) return; done = true; clearTimeout(timer); resolve(r); };
 
-    const req = lib.request(target, { method: 'POST', headers }, (res) => {
+    const req = lib.request(target, { method: 'POST', headers, signal }, (res) => {
       const chunks = [];
       let size = 0;
       res.on('data', (c) => {
@@ -269,8 +274,13 @@ function postCoach({ baseUrl, accessToken = '', question, editor, version, timeo
   });
 }
 
+function postScreenAnalysis({ baseUrl, accessToken, timeoutMs, signal, image, mime_type, editor, version }) {
+  return postJson({ baseUrl, accessToken, timeoutMs, signal, endpoint: '/v1/screen-analysis',
+    payload: { image, mime_type, editor, version, mode: 'improve' } });
+}
+
 module.exports = {
   DEFAULT_API_URL, COACH_PATH, MAX_QUESTION_CHARS, MAX_RESPONSE_BYTES, SUPPORTED_APPS, UPCOMING_APPS, DEFAULTS,
   panelResize, isLoopback, validateBaseUrl, urlWarning, loadConfig, saveConfig,
-  clampToArea, defaultMascotPosition, mascotPositionForBubble, panelPosition, sanitizeText, postCoach,
+  clampToArea, defaultMascotPosition, mascotPositionForBubble, panelPosition, sanitizeText, postCoach, postScreenAnalysis,
 };

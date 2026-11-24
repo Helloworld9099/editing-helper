@@ -20,6 +20,18 @@ let cfgFile;
 let cfg = { ...core.DEFAULTS };
 let normal = false;            // regular framed windows instead of the borderless pet
 let mascot = null, panel = null, settingsWin = null;
+let captureTool;
+function openCapture() {
+  if (!captureTool) {
+    captureTool = require('./capture').createCaptureTool(() => ({
+      baseUrl: process.env.EDITING_HELPER_API || cfg.apiBaseUrl,
+      accessToken: process.env.EDITING_HELPER_API ? process.env.EDITING_HELPER_ACCESS_TOKEN : '',
+      editor: cfg.editor, version: cfg.editorVersion, timeoutMs: cfg.timeoutSeconds * 1000,
+    }));
+  }
+  captureTool();
+}
+
 let busy = false;
 let quitting = false;
 let drag = null, panelDrag = null;
@@ -366,6 +378,7 @@ function registerIpc() {
     if (!isFrom(e, mascot)) return;
     Menu.buildFromTemplate([
       { label: 'Ask a question', click: openPanel },
+      { label: 'Review screenshot…', click: openCapture },
       { label: 'Settings…', click: () => openSettings('settings') },
       { label: 'Chat size', submenu: [
         { label: 'Compact (320 × 400)', click: () => setChatSize(320, 400) },
