@@ -279,6 +279,7 @@ function registerIpc() {
     try { core.saveConfig(next, cfgFile); }
     catch { return { ok: false, errors: { form: 'Could not save settings. Check file permissions and try again.' } }; }
     cfg = next;
+    if (!wasSetup && alive(panel)) panel.webContents.send('panel:config-changed');
     if (wasSetup && cfg.setupDone) normal = forceNormal || cfg.windowMode === 'normal';
     for (const w of [mascot, panel]) if (alive(w)) w.setAlwaysOnTop(cfg.keepOnTop, 'floating');
     if (wasSetup && cfg.setupDone) { createMascot(); createPanel(); }   // before setup window closes
