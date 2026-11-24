@@ -53,9 +53,18 @@ Choose a different editor in Settings and verify that the app remembers the choi
 
 - Launch `npm start` without `EDITING_HELPER_DEV_SETTINGS`: the ordinary Settings screen must not show Server address, Access token, or Forget saved token. Saving editor/window preferences must not change connection configuration.
 - Launch the **unpackaged** app with `EDITING_HELPER_DEV_SETTINGS=1 npm start`: the developer-only connection controls should be visible. The shared token must never be returned by config:get, saved in config.json, or sent to a different overridden host.
-- In an actual **packaged** build, the app must not read local developer tokens, environment token overrides or mutable saved API URLs. The default release-config.json intentionally fails closed because public account authentication is not yet implemented.
+- In an actual **packaged** build, the app must not read local developer tokens, environment token overrides or mutable saved API URLs. The blank default release-config.json intentionally fails closed; a configured release uses email OTP, per-user JWT verification on the backend and Redis quotas.
 - Verify replies with no RAG references show exactly `AI guidance`; replies with references should retain source buttons.
-- The desktop build and backend do **not** constitute a safe public deployment until the server verifies individual accounts and applies shared-store rate limits/quotas.
+- Public sign-in and shared-store quotas are implemented behind **COACH_AUTH_MODE=users**, but are not production-verified until Supabase + SMTP + Redis + Northflank are configured and tested. Do not distribute any shared service token.
+
+### Public user flow (requires configured services)
+
+- Run `python3 .github/scripts/write_release_config.py` from the repository root with valid `PUBLIC_API_URL`, `PUBLIC_SUPABASE_URL`, and `PUBLIC_SUPABASE_PUBLISHABLE_KEY` environment variables.
+- Start `EDITING_HELPER_PUBLIC_PREVIEW=1 npm start` from `desktop/`. Select an editor, request an email OTP, and verify it. No shared service token should be shown, required or sent.
+- Sign in, ask an editing question, quit, relaunch, confirm session refresh when a secure keyring is available, then sign out.
+- Verify missing/expired/fabricated/unconfirmed tokens fail with 401; user daily quota returns 429; Redis outage returns 503 without calling Gemini.
+- With no secure keyring (Linux `basic_text`), sign-in should still work for the current session, but not persist an unencrypted refresh token.
+- Build candidate installers via GitHub Actions and test `.AppImage`, `.deb`, `.exe`, `.dmg` on their native operating systems. Review signing/notarization requirements.
 
 ### RAG reference check
 
