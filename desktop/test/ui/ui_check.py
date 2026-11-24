@@ -90,9 +90,21 @@ with sync_playwright() as pw:
     p.evaluate("document.activeElement && document.activeElement.blur()")
     p.evaluate("window.__resolveAsk({ok:true, answer:'<img src=x onerror=\"window.__pwned=1\">Press C.\\nThen click.'})")
     p.wait_for_timeout(150)
-    check("panel: reply rendered as literal text, no element injected",
-          p.locator("#log img").count() == 0 and p.evaluate("window.__pwned") is None and "<img src=x" in p.inner_text("#log"))
-    check("panel: newlines preserved", p.evaluate("getComputedStyle(document.querySelector('.msg.coach .body')).whiteSpace") == "pre-wrap")
+    check("panel: untrusted HTML cannot insert images, scripts, or event handlers",
+          p.locator("#log img, #log script").count() == 0 and p.evaluate("window.__pwned") is None and "Press C." in p.inner_text("#log"))
+    check("panel: coach reply uses Markdown layout",
+          p.evaluate("getComputedStyle(document.querySelector('.msg.coach .body')).whiteSpace") == "normal")
+    p.fill("#input", "show formatting"); p.press("#input", "Enter")
+    p.evaluate("window.__resolveAsk({ok:true, answer:'## Method 1\\n\\n**Bold instruction**\\n\\n1. First step\\n2. Second step\\n\\n`code`'})")
+    p.wait_for_timeout(150)
+    check("panel: Markdown headings, bold, lists, and inline code are rendered",
+          p.locator(".msg.coach .body h2").count() >= 1
+          and p.locator(".msg.coach .body strong").count() >= 1
+          and p.locator(".msg.coach .body ol li").count() >= 2
+          and p.locator(".msg.coach .body code").count() >= 1)
+    check("panel: no visible Markdown syntax tokens",
+          "**Bold instruction**" not in p.inner_text(".msg.coach:last-of-type"))
+
     check("panel: reply does not steal focus", p.evaluate("document.activeElement.id") != "input")
     check("panel: draft typed during wait is preserved and Send re-enabled",
           not p.is_disabled("#send") and p.input_value("#input") == "second question" and p.inner_text("#status") == "")
