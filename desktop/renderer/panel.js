@@ -77,7 +77,7 @@
           }
         }
       } else {
-        foot.textContent = 'AI guidance · no matching documentation found';
+        foot.textContent = 'AI guidance';
       }
       el.appendChild(foot);
     }
