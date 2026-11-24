@@ -59,6 +59,8 @@ class RAGBackendTests(unittest.TestCase):
             self.assertGreater(len(answer["sources"]), 0)
             self.assertEqual(answer["sources"][0]["id"], "kdenlive-broken-tv")
             self.assertEqual(answer["sources"][0]["source_kind"], "official")
+            self.assertEqual(answer["sources"][0]["review_status"], "source_checked")
+            self.assertIn(answer["sources"][0]["category"], ("effects", "general"))
             self.assertTrue(all(s["editor"] == "Kdenlive" for s in answer["sources"]))
             self.assertTrue(all(s["url"].startswith("https://") for s in answer["sources"]))
 
@@ -77,18 +79,35 @@ class RAGBackendTests(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertNotIn("sources", response.json())
 
-    def test_other_editor_still_works_without_indexed_sources(self):
+    def test_other_editor_uses_its_own_documentation_without_cross_contamination(self):
         def fake(request):
             question = json.loads(request.content)["contents"][0]["parts"][0]["text"]
             self.assertIn("Editor: Canva", question)
-            self.assertNotIn("RETRIEVED REFERENCE DATA", question)
+            self.assertIn("RETRIEVED REFERENCE DATA", question)
+            self.assertNotIn("Editor: Kdenlive", question)
             return httpx.Response(200, json={"candidates": [{"content": {
-                "parts": [{"text": "Check the Canva video editor controls."}]
+                "parts": [{"text": "Use the Canva video timeline."}]
             }}]})
 
         with self.client(fake) as client:
             response = client.post("/v1/coach", headers=self.headers, json={
-                "editor": "Canva", "question": "How to zoom?",
+                "editor": "Canva", "question": "How to split elements in the video timeline?",
+            })
+            self.assertEqual(response.status_code, 200)
+            self.assertTrue(response.json()["sources"])
+            self.assertTrue(all(s["editor"] == "Canva" for s in response.json()["sources"]))
+
+    def test_no_matching_terms_has_no_fabricated_source_references(self):
+        def fake(request):
+            question = json.loads(request.content)["contents"][0]["parts"][0]["text"]
+            self.assertNotIn("RETRIEVED REFERENCE DATA", question)
+            return httpx.Response(200, json={"candidates": [{"content": {
+                "parts": [{"text": "I do not have a reference on that topic."}]
+            }}]})
+
+        with self.client(fake) as client:
+            response = client.post("/v1/coach", headers=self.headers, json={
+                "editor": "Canva", "question": "zzzxnonexistentterm",
             })
             self.assertEqual(response.status_code, 200)
             self.assertNotIn("sources", response.json())
