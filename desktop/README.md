@@ -76,32 +76,11 @@ python launch.py --runner /path/to/llama-server --model /path/to/model.gguf -- \
 
 ## Connection modes
 
-### Normal desktop UI
+**For your own developer checkout**: `cd desktop && npm start` uses your previously saved private Northflank connection. To edit its HTTPS URL or shared developer token, use `EDITING_HELPER_DEV_SETTINGS=1 npm start` (unpackaged only).
 
-Ordinary users see only editor, version and window preferences. **Server address and the shared access token are not shown in normal Settings.** Responses without a retrieved source now display only `AI guidance`; existing document links still appear when retrieval finds them.
+**For a packaged public build**: users do not enter an API URL, shared access token or Gemini key. The app uses the publisher-configured HTTPS service, opens an email-code sign-in window, refreshes each user's session, and sends that user's token to FastAPI. Only the refresh token is persisted using the OS keyring when available. Public FastAPI verifies the account against Supabase and enforces Redis usage quotas before contacting Gemini.
 
-For local development, existing saved URL/token settings continue to work when you launch from an existing checkout with `npm start`, even with the connection fields hidden.
-
-### Your local development connection
-
-Only an **unpackaged** Electron development app can show connection controls. Launch with:
-
-```bash
-cd desktop
-EDITING_HELPER_DEV_SETTINGS=1 npm start
-```
-
-Open the pet's **Settings** and enter your Northflank HTTPS URL and your developer access token. The URL is saved in the local Electron config; the token remains encrypted separately with Electron safeStorage when GNOME Keyring/KWallet is available. Developer mode does not weaken the backend's authentication: it just restores the controls for your own testing.
-
-Do not share your `COACH_ACCESS_TOKEN`. The optional environment variables `EDITING_HELPER_API` and `EDITING_HELPER_ACCESS_TOKEN` still work for unpackaged local development.
-
-### Public/packaged releases
-
-Packaged Electron applications ignore saved developer URLs, saved developer tokens and developer environment-variable overrides. They read the **nonsecret** publisher API URL from `src/release-config.json`; the shared access token is never bundled in the app.
-
-`src/release-config.json` intentionally has an empty URL and `authentication: "not-configured"`. Until you implement *individual user authentication* on the desktop and enforce it in FastAPI, packaged public releases display a connection/setup error rather than trying to use the private shared-token server.
-
-**Do not set `authentication: "user-accounts"` just to bypass the startup warning.** Doing so does not implement sign-in or backend authorization. Do not disable `COACH_REQUIRE_AUTH` or distribute the server's shared token to make a public build work. Follow [PUBLIC_RELEASE.md](PUBLIC_RELEASE.md) first.
+A public installer requires configuration of Supabase Auth, email delivery, Redis and Northflank. The default release-config.json contains placeholders and intentionally blocks connections. For instructions, see [PUBLIC_RELEASE.md](PUBLIC_RELEASE.md). The GitHub Actions build workflow generates candidate .AppImage/.deb/.exe/.dmg installers; unsigned macOS/Windows builds are not yet trusted by their platforms.
 
 ## Verification and scope
 
