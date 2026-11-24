@@ -126,7 +126,7 @@ test('input validation happens before any request', () =>
 test('HTML in a reply stays literal text', () =>
   withServer((req, res) => json(res, 200, { answer: '<img src=x onerror=alert(1)>' }), async (s) => {
     const r = await core.postCoach({ baseUrl: s.url, question: 'hi' });
-    assert.equal(r.answer, '<img src=x onerror=alert(1)>');   // untouched; the UI uses textContent
+    assert.equal(r.answer, '<img src=x onerror=alert(1)>');   // transport leaves raw text alone; renderer sanitizes Markdown
   }));
 
 // ---- URLs ---------------------------------------------------------------
