@@ -291,6 +291,10 @@ function registerIpc() {
     } else if (replacementToken && !secureTokenStorageAvailable) {
       errors.accessToken = 'Secure system keyring unavailable. Unlock GNOME Keyring or KWallet, then reopen Settings.';
     }
+    if (!error && savedAccessToken && !forgetToken && !replacementToken &&
+        new URL(url).origin !== new URL(cfg.apiBaseUrl).origin) {
+      errors.accessToken = 'Server host changed. Re-enter the token for that host or choose Forget saved token.';
+    }
     if (!error && (replacementToken || (!forgetToken && savedAccessToken)) &&
         !core.isLoopback(new URL(url).hostname) && new URL(url).protocol !== 'https:') {
       errors.apiBaseUrl = 'Use HTTPS for a hosted server when using an access token.';
