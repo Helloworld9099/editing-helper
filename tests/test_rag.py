@@ -89,6 +89,31 @@ class KnowledgeTests(unittest.TestCase):
                 self.assertTrue(docs)
                 self.assertTrue(all(d["editor"] == editor for d in docs))
 
+    def test_reviewed_notes_remain_retrievable_with_hundreds_of_catalog_links(self):
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            doc = dict(read_notes()[0])
+            doc.update({"id": "reviewed-effects", "editor": "Kdenlive", "version": "*",
+                        "title": "Effects controls", "keywords": ["effects"],
+                        "note": "Verified effects workflow in the Kdenlive editing interface.",
+                        "source_url": "https://example.com/reviewed-effects",
+                        "review_status": "source_checked", "category": "effects"})
+            all_docs = []
+            for n in range(250):
+                link = dict(doc)
+                link.update({"id": f"catalog-effects-{n}", "source_url": f"https://example.com/doc-{n}",
+                             "review_status": "link_checked"})
+                all_docs.append(link)
+            all_docs.append(doc)
+            (folder / "notes.jsonl").write_text(
+                "".join(json.dumps(row) + "\n" for row in all_docs), encoding="utf-8")
+            test_db = folder / "large.sqlite3"
+            self.assertEqual(build_index(folder, test_db), 251)
+            results = search_notes("effects", "Kdenlive", database=test_db)
+            self.assertTrue(results)
+            self.assertEqual(results[0]["id"], "reviewed-effects")
+            self.assertEqual(results[0]["review_status"], "source_checked")
+
     def test_supplemental_import_deduplicates_sources_against_baseline(self):
         """Additional links may point into the same manual, but never at the same section."""
         import re
