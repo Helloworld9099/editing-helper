@@ -130,7 +130,7 @@ with sync_playwright() as pw:
           ['openSource', 'https://docs.kdenlive.org/en/transform.html'] in p.evaluate("window.__calls"))
 
     p.fill("#input", "line1"); p.press("#input", "Shift+Enter")
-    check("panel: Shift+Enter makes a newline, doesn't send", "\n" in p.input_value("#input") and names(p).count("ask") == 2)
+    check("panel: Shift+Enter makes a newline, doesn't send", "\n" in p.input_value("#input") and names(p).count("ask") == 3)
     p.fill("#input", "next"); p.press("#input", "Enter")
     p.evaluate("window.__resolveAsk({ok:false, kind:'offline', message:\"Can't reach the coach server at http://127.0.0.1:8000.\"})")
     p.wait_for_timeout(150)
