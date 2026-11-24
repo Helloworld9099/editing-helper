@@ -20,7 +20,7 @@ class KnowledgeTests(unittest.TestCase):
     def test_all_editors_have_organized_sources_and_reviewed_notes(self):
         from knowledge_rag import SUPPORTED_EDITORS, SOURCES_DIR
         notes = read_notes()
-        self.assertGreaterEqual(self.count, 1100)
+        self.assertGreaterEqual(self.count, 3000)
         self.assertEqual(self.count, len(notes))
         self.assertEqual({note["editor"] for note in notes}, SUPPORTED_EDITORS)
         self.assertEqual({note["editor"] for note in notes if note["review_status"] == "source_checked"},
@@ -88,6 +88,47 @@ class KnowledgeTests(unittest.TestCase):
                 docs = search_notes(question, editor, database=self.db)
                 self.assertTrue(docs)
                 self.assertTrue(all(d["editor"] == editor for d in docs))
+
+    def test_supplemental_import_deduplicates_sources_against_baseline(self):
+        """Additional links may point into the same manual, but never at the same section."""
+        import re
+        from urllib.parse import parse_qsl, unquote, urlsplit
+
+        def identity(doc):
+            url = urlsplit(doc["source_url"].replace("&amp;", "&"))
+            host = (url.hostname or "").lower().removeprefix("www.")
+            path = re.sub(r"/+", "/", unquote(url.path)).rstrip("/") or "/"
+            if host == "support.apple.com":
+                path = re.sub(r"^/[a-z]{2}(?:-[a-z]{2})?/(guide/)", r"/\\1", path)
+                path = re.sub(r"/\\d+\\.\\d+(?:\\.\\d+)?/(mac|ios|ipados)(?:/[^/]+)?$",
+                              r"/\\1", path)
+            if host in {"openshot.org", "cdn.openshot.org"}:
+                host = "openshot.org"
+                path = path.replace("/static/files/user-guide/", "/files/user-guide/")
+            if host == "shotcut.org":
+                path = path.lower()
+            query = tuple(sorted((k, v) for k, v in parse_qsl(url.query)
+                                 if k.lower() not in {"_v", "fbclid", "sid", "ref"}
+                                 and not k.lower().startswith("utm_")))
+            fragment = (url.fragment if url.fragment
+                        and not url.fragment.startswith(("main-", "top-", "_r_"))
+                        else "")
+            return doc["editor"], host, path, query, fragment
+
+        entries = read_notes()
+        supplemental = [e for e in entries if "-supplemental-" in e["id"]]
+        baseline = {identity(e) for e in entries if "-supplemental-" not in e["id"]}
+        self.assertEqual(len(supplemental), 1689)
+        self.assertEqual(len(entries), 3066)
+        self.assertEqual({e["editor"] for e in supplemental},
+                         {e["editor"] for e in entries})
+        seen = set()
+        for entry in supplemental:
+            key = identity(entry)
+            self.assertNotIn(key, baseline, entry["source_url"])
+            self.assertNotIn(key, seen, entry["source_url"])
+            seen.add(key)
+            self.assertEqual(entry["review_status"], "link_checked")
 
     def test_malicious_query_is_quoted_and_cannot_escape_fts(self):
         for query in ['" OR NOT *', 'foo*** OR Kdenlive', 'glitch ) OR (', ' AND "; DROP TABLE notes; --']:

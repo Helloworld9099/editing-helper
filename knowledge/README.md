@@ -6,20 +6,22 @@ The AI uses an offline SQLite FTS5 index built from **original, short, source-at
 
 | Editing software | All records | Source-reviewed notes | Link-only references |
 | --- | ---: | ---: | ---: |
-| Adobe Premiere Pro | 428 | 3 | 425 |
-| DaVinci Resolve | 49 | 7 | 42 |
-| Kdenlive | 252 | 7 | 245 |
-| Shotcut | 302 | 4 | 298 |
-| CapCut | 104 | 5 | 99 |
-| ACDSee Luxea | 36 | 5 | 31 |
-| Lightworks | 74 | 3 | 71 |
-| Clipchamp | 36 | 4 | 32 |
-| OpenShot | 20 | 6 | 14 |
-| Canva | 32 | 5 | 27 |
-| iMovie (Mac) | 44 | 6 | 38 |
-| **Total** | **1,377** | **55** | **1,322** |
+| Adobe Premiere Pro | 843 | 3 | 840 |
+| DaVinci Resolve | 245 | 7 | 238 |
+| Kdenlive | 593 | 7 | 586 |
+| Shotcut | 317 | 4 | 313 |
+| CapCut | 136 | 5 | 131 |
+| ACDSee Luxea | 116 | 5 | 111 |
+| Lightworks | 82 | 3 | 79 |
+| Clipchamp | 180 | 4 | 176 |
+| OpenShot | 296 | 6 | 290 |
+| Canva | 45 | 5 | 40 |
+| iMovie (Mac, iOS, iPadOS references) | 213 | 6 | 207 |
+| **Total** | **3,066** | **55** | **3,011** |
 
-**Do not treat these as 1,377 verified tutorials.** The 55 source-reviewed notes are original concise paraphrases of individual techniques; they have NOT all been physically executed in their editors. The 1,322 link-only records are a searchable, editor-specific *directory* of relevant official guides or public forum discussions, not extracted article bodies or proofs of particular steps. This split prevents a forum title from becoming a false instruction.
+**Do not treat these as 3,066 verified tutorials.** The 55 source-reviewed notes are original concise paraphrases of individual techniques; they have NOT all been physically executed in their editors. The 3,011 link-only records are a searchable, editor-specific *directory* of relevant official guides or public forum discussions, not extracted article bodies or proofs of particular steps. This split prevents a forum title from becoming a false instruction.
+
+The 1,689 supplemental additions are cataloged in `knowledge/sources/<editor>/supplemental-links.jsonl`; every editor has one such file. **Thirty duplicate OpenShot URLs were excluded** after normalizing manual aliases, tracking parameters and path variants. Section anchors and individual PDF page anchors are retained when they identify distinct material within a longer manual. The supplemental entries are link-only, not source-reviewed instructions. iMovie additions include Mac, iPhone, and iPad links with platform notes, not interchangeable interface guidance.
 
 The source index covers **all 11 editors**. Coverage varies widely by vendor, and the count is a snapshot—not a claim that every available page or forum was found.
 
@@ -31,6 +33,7 @@ knowledge/
     resolve20.jsonl                # reviewed DaVinci Resolve 20 summaries
     kdenlive26.jsonl               # reviewed Kdenlive 26.08 summaries
     premiere-pro/
+      supplemental-links.jsonl       # additional deduplicated source references
       official-links.jsonl
       community-links.jsonl
       reviewed-notes.jsonl
@@ -78,6 +81,8 @@ Every record also has a **category** such as timeline, keyframes, effects, trans
 - `needs_review`: Newly added or unchecked material. The indexer **excludes** these records until reviewed.
 
 Sources are **not** copied or mirrored in full. Forum posts may be inaccurate, outdated, contradictory, subject to access terms, or contain personal information. Link indexing does not grant permission to reproduce thread bodies or train on them.
+
+Each editor subdirectory also contains a `supplemental-links.jsonl` catalog. Links were deduplicated against the snapshot before import and against other incoming links. These are URL/section records rather than guaranteed distinct full documents: for example, two DaVinci Resolve PDF page anchors can lead to different sections of one PDF.
 
 ## Explore and rebuild the index
 

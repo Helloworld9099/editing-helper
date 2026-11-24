@@ -34,7 +34,7 @@ curl -fsS http://127.0.0.1:8000/v1/coach \
 
 ## Editor knowledge base (RAG)
 
-When enabled, Editing Helper searches an **offline-built SQLite FTS5 index** containing **1,377 organized editor-specific references** across all 11 supported editors: 55 short, original source-reviewed summaries plus 1,322 navigation-only links to official manuals and community discussions. These are **not 1,377 verified tutorials**: link-only entries point to sources but do not establish any specific editing procedure. Records are organized by editor folder, topic category, software version and source type.
+When enabled, Editing Helper searches an **offline-built SQLite FTS5 index** containing **3,066 editor-specific records** across all 11 supported editors: 55 short, original source-reviewed summaries plus 3,011 navigation-only links to official manuals and public community sources. A supplemental source import added 1,689 links after removing 30 canonical URL duplicates. These are **not 3,066 verified tutorials**: link-only entries point to sources but do not establish any specific editing procedure. Records are organized by editor folder, topic category, software version and source type.
 
 The API preserves the original answer field and optionally returns a sources array with source-review level and topic. The desktop distinguishes "Source-reviewed notes" from "Further reading (links only)" with safe click-to-open HTTPS links. A source link means a relevant record was retrieved, **not** that all generated instructions have been physically verified.
 
