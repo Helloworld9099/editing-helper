@@ -44,7 +44,10 @@ def run(args):
                 probe.bind(("127.0.0.1", port))
             except OSError as exc:
                 raise RuntimeError(f"Port {port} is unavailable. Stop the old demo first.") from exc
-    clean_env = {k: v for k, v in os.environ.items() if not k.startswith("LLAMA_")}
+    hosted_settings = {"COACH_ACCESS_TOKEN", "COACH_REQUIRE_AUTH", "COACH_ALLOWED_HOSTS",
+                       "EDITING_HELPER_ACCESS_TOKEN", "GROQ_API_KEY"}
+    clean_env = {k: v for k, v in os.environ.items()
+                 if not k.startswith("LLAMA_") and k not in hosted_settings}
     processes = []
     try:
         processes.append(subprocess.Popen([

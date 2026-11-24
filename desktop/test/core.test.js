@@ -30,13 +30,32 @@ async function withServer(handler, fn) {
 }
 
 test('ok: sends {"question"} to POST /v1/coach and returns sanitized answer', () =>
-  withServer((req, res) => json(res, 200, { answer: 'Press C for razor.\u0000\u001b' }), async (s) => {
+  withServer((req, res) => {
+    assert.equal(req.headers.authorization, undefined);
+    json(res, 200, { answer: 'Press C for razor.\u0000\u001b' });
+  }, async (s) => {
     const r = await core.postCoach({ baseUrl: s.url + '/', question: '  how to cut? ' });
     assert.deepEqual(r, { ok: true, answer: 'Press C for razor.' });
     assert.equal(s.state.method, 'POST');
     assert.equal(s.state.path, '/v1/coach');
     assert.deepEqual(JSON.parse(s.state.body), { question: 'how to cut?' });
   }));
+
+test('sends the configured access token as a bearer header', () =>
+  withServer((req, res) => {
+    assert.equal(req.headers.authorization, 'Bearer test-coach-token');
+    json(res, 200, { answer: 'Authorized' });
+  }, async (s) => {
+    const r = await core.postCoach({ baseUrl: s.url, question: 'Hi', accessToken: 'test-coach-token' });
+    assert.deepEqual(r, { ok: true, answer: 'Authorized' });
+    assert.deepEqual(JSON.parse(s.state.body), { question: 'Hi' });
+  }));
+
+test('rejects access tokens over plain HTTP to non-loopback hosts', async () => {
+  const r = await core.postCoach({ baseUrl: 'http://coach.example.com', question: 'Hi', accessToken: 'token' });
+  assert.equal(r.kind, 'config');
+  assert.match(r.message, /HTTPS/);
+});
 
 test('offline: connection refused', async () => {
   const s = await startServer(() => {});

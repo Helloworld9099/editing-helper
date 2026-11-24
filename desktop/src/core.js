@@ -198,7 +198,7 @@ const OFFLINE_CODES = new Set(['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'EHOSTU
  * kind: empty | config | offline | timeout | tls | http | unexpected
  * No proxies, no redirects followed, response size capped.
  */
-function postCoach({ baseUrl, question, editor, version, timeoutMs = 90000 }) {
+function postCoach({ baseUrl, accessToken = '', question, editor, version, timeoutMs = 90000 }) {
   return new Promise((resolve) => {
     const fail = (kind, message) => resolve({ ok: false, kind, message });
     const q = String(question ?? '').trim();
@@ -208,6 +208,13 @@ function postCoach({ baseUrl, question, editor, version, timeoutMs = 90000 }) {
     if (error) return fail('config', `Server address problem: ${error}`);
 
     const target = new URL(base + COACH_PATH);
+    const token = accessToken.trim();
+    if (token && !/^[A-Za-z0-9._~+/=-]+$/.test(token)) {
+      return fail('config', 'The configured coach access token is invalid.');
+    }
+    if (token && target.protocol !== 'https:' && !isLoopback(target.hostname)) {
+      return fail('config', 'Use HTTPS to send a coach access token to a hosted server.');
+    }
     const payload = { question: q };
     if (editor != null) {
       if (!SUPPORTED_APPS.includes(editor)) return fail('config', 'Choose a supported editor in Settings.');
@@ -216,6 +223,8 @@ function postCoach({ baseUrl, question, editor, version, timeoutMs = 90000 }) {
       if (v) payload.version = v;
     }
     const body = Buffer.from(JSON.stringify(payload));
+    const headers = { 'Content-Type': 'application/json', 'Content-Length': body.length, Accept: 'application/json' };
+    if (token) headers.Authorization = `Bearer ${token}`;
     const lib = target.protocol === 'https:' ? https : http;
     const secs = Math.round(timeoutMs / 1000);
     const broken = { ok: false, kind: 'unexpected', message: 'The connection to the server broke mid-reply. Try again.' };
@@ -223,10 +232,7 @@ function postCoach({ baseUrl, question, editor, version, timeoutMs = 90000 }) {
     let timer;
     const finish = (r) => { if (done) return; done = true; clearTimeout(timer); resolve(r); };
 
-    const req = lib.request(target, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Content-Length': body.length, Accept: 'application/json' },
-    }, (res) => {
+    const req = lib.request(target, { method: 'POST', headers }, (res) => {
       const chunks = [];
       let size = 0;
       res.on('data', (c) => {

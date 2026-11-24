@@ -2,7 +2,7 @@
 
 **Desktop app:** See [desktop/README.md](desktop/README.md) to launch the floating frontend and test it without a model.
 
-Local API for the Editing Helper desktop companion. The frontend is developed separately. This version returns raw Qwen answers; it does not claim to provide verified editing instructions.
+API for the Editing Helper desktop companion. It returns model-generated editing advice from a local model or Groq.
 
 ## Start on Ubuntu
 
@@ -20,10 +20,9 @@ If Ubuntu reports that `venv` is unavailable, install your distro's `python3-ven
 
 ## Frontend contract
 
-- `GET /health` returns `{"status":"ok"}` when the API process is up. It does not check model readiness or call Ollama.
+- `GET /health` is public on allowed hosts and returns `{"status":"ok"}` when the API process is up.
 - `POST /v1/coach` takes `{"question":"..."}` as JSON. A successful reply is `{"answer":"..."}`. Render the answer as plain text.
-- `422`: invalid input; `429`: another reply is in progress; `503`: Ollama/model unavailable; `504`: model timeout; `502`: other invalid upstream result. Errors contain a `detail` field.
-- The frontend requests only the API on port 8000. Port 11434 is reserved for the API's connection to Ollama.
+- A missing or invalid hosted access token returns `401`. Invalid input returns `422`, a busy coach returns `429`, an unavailable provider or model returns `503`, a model timeout returns `504`, and other upstream failures return `502`. Errors contain a `detail` field.
 
 ```bash
 curl -fsS http://127.0.0.1:8000/health
@@ -34,7 +33,31 @@ curl -fsS http://127.0.0.1:8000/v1/coach \
 
 ## Model and scope
 
-Change `COACH_MODEL` in the server's environment and restart to try a different already-installed local model. No client change is needed. The API has no cloud fallback or external integrations. Use Ollama's local-only configuration if you also want to disable cloud features in Ollama itself. Keep both services bound to loopback; this version has no public authentication or hosting setup.
+Change `COACH_MODEL` in the server's environment and restart to try a different already-installed local model. Local development defaults to Ollama and accepts `localhost` and `127.0.0.1`. Keep local services bound to loopback and leave `COACH_ACCESS_TOKEN` unset for token-free use. The offline launcher uses llama.cpp.
+
+## Deploy on Northflank
+
+Build the root `Dockerfile` in your Northflank service and expose container port `8000` as public HTTP. Use the service's HTTPS URL in the desktop app. [Northflank port configuration](https://northflank.com/docs/v1/application/network/configure-ports)
+
+Set these runtime environment variables:
+
+| Variable | Value |
+| --- | --- |
+| `COACH_PROVIDER` | `groq` |
+| `COACH_MODEL` | A [Groq chat model ID](https://console.groq.com/docs/api-reference#chat-create), for example `llama-3.3-70b-versatile` |
+| `GROQ_API_KEY` | Your Groq API key, injected as a server secret |
+| `COACH_ACCESS_TOKEN` | A separate shared secret for desktop clients. Generate one with `python -c 'import secrets; print(secrets.token_urlsafe(32))'`. |
+| `COACH_ALLOWED_HOSTS` | Comma-separated hostnames without schemes or ports, including your Northflank hostname, any custom domain, and `127.0.0.1` for the probe below |
+
+Groq and the production container require `COACH_ACCESS_TOKEN` at startup. For a hosted deployment outside Docker, `COACH_REQUIRE_AUTH=1` also makes the token mandatory with either local provider. Setting `COACH_ACCESS_TOKEN` protects `/v1/coach` with every provider.
+
+Use a Northflank command health check to probe the loopback address. [Northflank health-check configuration](https://northflank.com/docs/v1/application/observe/configure-health-checks)
+
+```bash
+python -c 'from urllib.request import urlopen; urlopen("http://127.0.0.1:8000/health", timeout=2).close()'
+```
+
+To connect Electron, set `EDITING_HELPER_API` to the HTTPS service URL and `EDITING_HELPER_ACCESS_TOKEN` to the server's `COACH_ACCESS_TOKEN` in the environment that launches Electron. See [desktop setup](desktop/README.md#connect-to-a-hosted-backend).
 
 ## Backend tests
 
@@ -42,7 +65,7 @@ Change `COACH_MODEL` in the server's environment and restart to try a different 
 .venv/bin/python -m unittest discover -s tests -v
 ```
 
-Tests use a fake Ollama endpoint. They validate the service contract and error handling, not Qwen's editing knowledge.
+Tests use simulated Ollama, llama.cpp, and Groq responses and cover access tokens, allowed hosts, and public health checks.
 
 ## Local desktop build and training
 

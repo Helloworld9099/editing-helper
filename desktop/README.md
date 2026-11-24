@@ -69,6 +69,20 @@ python launch.py --runner /path/to/llama-server --model /path/to/model.gguf -- \
   "$PWD/desktop/node_modules/.bin/electron" "$PWD/desktop"
 ```
 
+## Connect to a hosted backend
+
+From `desktop/`, launch Electron with the HTTPS service address and the same access token the backend uses for `COACH_ACCESS_TOKEN`. In Bash:
+
+```bash
+read -rsp 'Coach access token: ' EDITING_HELPER_ACCESS_TOKEN
+printf '\n'
+EDITING_HELPER_API=https://coach.example.com \
+  EDITING_HELPER_ACCESS_TOKEN="$EDITING_HELPER_ACCESS_TOKEN" npm start
+unset EDITING_HELPER_ACCESS_TOKEN
+```
+
+The launch URL overrides **Server address** for that session and is where Electron sends the bearer token. Start Electron without these variables to use the saved server address again. `GROQ_API_KEY` belongs on the backend.
+
 ## Verification and scope
 
 Run `npm test` for the client tests. See [TESTING.md](TESTING.md)

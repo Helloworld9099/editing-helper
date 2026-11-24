@@ -1,17 +1,25 @@
-"""Loopback-only Editing Helper API. Start with python -m uvicorn app:app."""
+"""Editing Helper API for local models and hosted Groq deployments."""
 import asyncio
 import os
 import re
 from contextlib import asynccontextmanager
+from secrets import compare_digest
 
 import httpx
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.security import HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 OLLAMA_CHAT = "http://127.0.0.1:11434/api/chat"
 LLAMA_CHAT = "http://127.0.0.1:8081/v1/chat/completions"
+GROQ_CHAT = "https://api.groq.com/openai/v1/chat/completions"
 DEFAULT_MODEL = "qwen3.5:4b"
+PROVIDERS = {
+    "ollama": ("Ollama", OLLAMA_CHAT, {"options": {"num_predict": 512}, "think": False}),
+    "llama.cpp": ("llama.cpp", LLAMA_CHAT, {"max_tokens": 512}),
+    "groq": ("Groq", GROQ_CHAT, {"max_completion_tokens": 512}),
+}
 
 
 class CoachRequest(BaseModel):
@@ -32,14 +40,48 @@ class CoachReply(BaseModel):
 
 def create_app(*, model=None, timeout=60.0, transport=None, provider=None):
     provider = provider or os.environ.get("COACH_PROVIDER", "ollama")
-    if provider not in ("ollama", "llama.cpp"):
-        raise ValueError("COACH_PROVIDER must be ollama or llama.cpp.")
-    engine = "Ollama" if provider == "ollama" else "llama.cpp"
-    model = os.environ.get("COACH_MODEL", DEFAULT_MODEL) if model is None else model
-    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:/-]{0,127}", model) or re.search(
+    if provider not in PROVIDERS:
+        raise ValueError("COACH_PROVIDER must be ollama, llama.cpp, or groq.")
+    engine, url, limits = PROVIDERS[provider]
+    groq = provider == "groq"
+    if model is None:
+        model = os.environ.get("COACH_MODEL", "" if groq else DEFAULT_MODEL)
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:/-]{0,127}", model):
+        raise ValueError("COACH_MODEL must be a valid model ID.")
+    if not groq and re.search(
         r"(^|[:/.-])cloud($|[:/.-])", model, re.IGNORECASE
     ):
-        raise ValueError("COACH_MODEL must name a local Ollama model.")
+        raise ValueError("COACH_MODEL must name a local model for this provider.")
+
+    upstream_headers = {}
+    if groq:
+        groq_key = os.environ.get("GROQ_API_KEY", "").strip()
+        if not groq_key:
+            raise ValueError("GROQ_API_KEY is required for Groq.")
+        upstream_headers["Authorization"] = f"Bearer {groq_key}"
+
+    access_token = os.environ.get("COACH_ACCESS_TOKEN", "").strip()
+    if not access_token and (groq or os.environ.get("COACH_REQUIRE_AUTH") == "1"):
+        raise ValueError("COACH_ACCESS_TOKEN is required for hosted deployments.")
+    if access_token and not re.fullmatch(r"[A-Za-z0-9._~+/=-]+", access_token):
+        raise ValueError("COACH_ACCESS_TOKEN must be a valid bearer token.")
+
+    allowed_hosts = [host.strip() for host in os.environ.get(
+        "COACH_ALLOWED_HOSTS", "localhost,127.0.0.1"
+    ).split(",") if host.strip()]
+    if not allowed_hosts:
+        raise ValueError("COACH_ALLOWED_HOSTS must contain at least one host.")
+
+    bearer = HTTPBearer(auto_error=False)
+
+    async def require_access_token(credentials=Depends(bearer)):
+        if access_token and (
+            credentials is None
+            or not compare_digest(credentials.credentials.encode(), access_token.encode())
+        ):
+            raise HTTPException(401, "A valid coach access token is required.", headers={
+                "WWW-Authenticate": "Bearer",
+            })
 
     @asynccontextmanager
     async def lifespan(api):
@@ -47,18 +89,19 @@ def create_app(*, model=None, timeout=60.0, transport=None, provider=None):
         async with httpx.AsyncClient(
             transport=transport, trust_env=False, follow_redirects=False, timeout=timeout
         ) as client:
-            api.state.ollama = client
+            api.state.model_client = client
             yield
 
     api = FastAPI(title="Editing Helper API", lifespan=lifespan)
-    api.add_middleware(TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1"])
+    api.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts)
 
     @api.get("/health")
     async def health():
-        # Liveness only; this intentionally doesn't run or probe Ollama.
+        # Liveness is independent of model availability.
         return {"status": "ok"}
 
-    @api.post("/v1/coach", response_model=CoachReply)
+    @api.post("/v1/coach", response_model=CoachReply,
+              dependencies=[Depends(require_access_token)] if access_token else [])
     async def coach(body: CoachRequest, request: Request):
         slot = request.app.state.slot
         if slot.locked():
@@ -72,13 +115,7 @@ def create_app(*, model=None, timeout=60.0, transport=None, provider=None):
                         if body.version:
                             question += f"Version: {body.version.strip()}\n"
                         question += body.question
-                    if provider == "ollama":
-                        url = OLLAMA_CHAT
-                        limits = {"options": {"num_predict": 512}, "think": False}
-                    else:
-                        url = LLAMA_CHAT
-                        limits = {"max_tokens": 512}
-                    reply = await request.app.state.ollama.post(url, json={
+                    reply = await request.app.state.model_client.post(url, headers=upstream_headers, json={
                         "model": model,
                         "messages": [{"role": "user", "content": question}],
                         "stream": False,

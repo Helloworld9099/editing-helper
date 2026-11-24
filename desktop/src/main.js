@@ -292,7 +292,15 @@ function registerIpc() {
     if (alive(mascot)) mascot.webContents.send('mascot:busy', true);
     let result;
     try {
-      result = await core.postCoach({ baseUrl: cfg.apiBaseUrl, question, editor: cfg.editor, version: cfg.editorVersion, timeoutMs: cfg.timeoutSeconds * 1000 });
+      const launchUrl = process.env.EDITING_HELPER_API;
+      result = await core.postCoach({
+        baseUrl: launchUrl || cfg.apiBaseUrl,
+        accessToken: launchUrl ? process.env.EDITING_HELPER_ACCESS_TOKEN : '',
+        question,
+        editor: cfg.editor,
+        version: cfg.editorVersion,
+        timeoutMs: cfg.timeoutSeconds * 1000,
+      });
     } catch {
       result = { ok: false, kind: 'unexpected', message: 'Unexpected problem while contacting the server.' };
     } finally {
