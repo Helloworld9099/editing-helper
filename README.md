@@ -32,6 +32,22 @@ curl -fsS http://127.0.0.1:8000/v1/coach \
   -d '{"question":"Reply with hello."}'
 ```
 
+## Editor knowledge base (RAG)
+
+When enabled, Editing Helper searches an **offline-built SQLite FTS5 index** of reviewed, paraphrased documentation notes before asking the model. There are 14 starter notes linked to original DaVinci Resolve 20 and Kdenlive 26.08 documentation. The remaining editors can still receive AI guidance, but do not have indexed references yet.
+
+The API preserves the original answer field and optionally returns a sources array with related documentation. The desktop displays those references as safe click-to-open links. A source link means a relevant note was retrieved, **not** that all generated instructions have been physically verified.
+
+For local use, build the index and explicitly enable RAG before starting FastAPI:
+
+~~~bash
+python3 knowledge_rag.py validate
+python3 knowledge_rag.py build
+COACH_RAG_ENABLED=1 .venv/bin/python -m uvicorn app:app --host 127.0.0.1 --port 8000
+~~~
+
+Northflank builds and enables the index automatically through the root Dockerfile. No extra hosting/database accounts or embedding API are required. For adding documentation or permitted, reviewed forum summaries, see [knowledge/README.md](knowledge/README.md). The index is generated and should not be committed.
+
 ## Model and scope
 
 Change `COACH_MODEL` in the server's environment and restart to try a different already-installed local model. Local development defaults to Ollama and accepts `localhost` and `127.0.0.1`. Keep local services bound to loopback and leave `COACH_ACCESS_TOKEN` unset for token-free use. The offline launcher uses llama.cpp.
@@ -83,7 +99,7 @@ To connect Electron, set `EDITING_HELPER_API` to the HTTPS service URL and `EDIT
 .venv/bin/python -m unittest discover -s tests -v
 ```
 
-Tests use simulated Ollama, llama.cpp, Groq, and Gemini responses and cover access tokens, allowed hosts, public health checks, and upstream errors.
+Tests use simulated Ollama, llama.cpp, Groq, and Gemini responses and cover access tokens, allowed hosts, public health checks, upstream errors, knowledge retrieval, and Gemini context injection.
 
 ## Local desktop build and training
 
