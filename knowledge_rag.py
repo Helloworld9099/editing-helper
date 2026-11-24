@@ -159,12 +159,16 @@ def search_notes(question: str, editor: str, version: str = "", *,
         return []
     expression = " OR ".join('"' + term + '"' for term in terms)
     with closing(sqlite3.connect(f"file:{db.resolve().as_posix()}?mode=ro", uri=True)) as connection:
-        rows = connection.execute("""SELECT n.id, n.editor, n.version, n.title,
+        ranked_sql = """SELECT n.id, n.editor, n.version, n.title,
                n.note, n.source_url, n.source_kind, n.review_status, n.category
                FROM note_fts JOIN notes AS n ON note_fts.rowid = n.rowid
-               WHERE note_fts MATCH ? AND n.editor = ?
-               ORDER BY bm25(note_fts, 3.0, 2.0, 2.0) LIMIT 200""",
-               (expression, editor)).fetchall()
+               WHERE note_fts MATCH ? AND n.editor = ? AND n.review_status = ?
+               ORDER BY bm25(note_fts, 3.0, 2.0, 2.0) LIMIT 200"""
+        # Query the two evidence tiers independently: a large catalog of link-only
+        # records must not crowd actual reviewed instructions out of the FTS top N.
+        reviewed_rows = connection.execute(ranked_sql, (expression, editor, "source_checked")).fetchall()
+        link_rows = connection.execute(ranked_sql, (expression, editor, "link_checked")).fetchall()
+        rows = reviewed_rows + link_rows
 
     # A source-checked paraphrase is useful evidence for an actual answer.
     # A link-only record is ONLY a further-reading pointer, not step-by-step proof.
