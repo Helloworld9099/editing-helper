@@ -54,7 +54,9 @@ class KnowledgeTests(unittest.TestCase):
         self.assertTrue(search_notes("zoom", "DaVinci Resolve", "20.1", database=self.db))
         v21 = search_notes("zoom", "DaVinci Resolve", "21", database=self.db)
         self.assertFalse(any(n["version"] == "20" for n in v21))
-        self.assertEqual(search_notes("zoom", "Kdenlive", "25.08", database=self.db), [])
+        old_version = search_notes("zoom", "Kdenlive", "25.08", database=self.db)
+        self.assertFalse(any(n["version"] == "26.08" for n in old_version))
+        self.assertTrue(all(n["review_status"] == "link_checked" for n in old_version))
 
     def test_reviewed_notes_priority_and_link_only_metadata(self):
         results = search_notes("keyframe animation zoom", "OpenShot", "4.1", database=self.db, limit=5)
