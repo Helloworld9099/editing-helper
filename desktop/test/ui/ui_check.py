@@ -77,7 +77,7 @@ with sync_playwright() as pw:
     check("panel: minimum window keeps Send visible",
           minimum.evaluate("(() => {const s=document.querySelector('#send').getBoundingClientRect(); return document.documentElement.scrollWidth <= innerWidth && s.bottom <= innerHeight;})()"))
     check("panel: welcome note mentions app and says not verified",
-          "DaVinci Resolve 20.1" in p.inner_text("#log") and "aren't checked against sources" in p.inner_text("#log"))
+          "DaVinci Resolve 20.1" in p.inner_text("#log") and "Related official references" in p.inner_text("#log"))
     p.evaluate("window.__selectEditor('Kdenlive', '26.08')")
     p.wait_for_timeout(50)
     check("panel: editor label refreshes after Settings change without reopening",
