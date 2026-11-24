@@ -74,31 +74,34 @@ python launch.py --runner /path/to/llama-server --model /path/to/model.gguf -- \
   "$PWD/desktop/node_modules/.bin/electron" "$PWD/desktop"
 ```
 
-## Connect to a hosted backend
+## Connection modes
 
-**One-time setup (recommended):**
+### Normal desktop UI
 
-1. Launch the app normally with `cd desktop && npm start`.
-2. Right-click the pet and open **Settings**.
-3. Enter the **Server address** (the HTTPS URL for your Northflank FastAPI service).
-4. Enter the **Access token** once (the same value configured as `COACH_ACCESS_TOKEN` on Northflank). Click **Save**.
-5. On later launches, simply run `npm start`. The server URL is already saved in `config.json`, while the access token is encrypted separately using Electron's OS keyring support.
+Ordinary users see only editor, version and window preferences. **Server address and the shared access token are not shown in normal Settings.** Responses without a retrieved source now display only `AI guidance`; existing document links still appear when retrieval finds them.
 
-You can replace a token by entering a new value in Settings, or select **Forget saved access token** to remove it. The token is **never returned to the HTML renderer, written to config.json, or committed to GitHub**. Electron's main process uses it only as an HTTPS bearer token (or to a loopback localhost server).
+For local development, existing saved URL/token settings continue to work when you launch from an existing checkout with `npm start`, even with the connection fields hidden.
 
-On Ubuntu, secure saving requires an unlocked GNOME Keyring or KWallet. If Electron selects its insecure Linux `basic_text` backend, the app **refuses to store** the token and Settings explains that the secure keyring is unavailable. If necessary, continue with the previous environment-variable launch method; avoid plaintext token files in the repository.
+### Your local development connection
 
-**Optional environment overrides (development / insecure keyring fallback):**
+Only an **unpackaged** Electron development app can show connection controls. Launch with:
 
 ```bash
-read -rsp 'Coach access token: ' EDITING_HELPER_ACCESS_TOKEN
-printf '\n'
-EDITING_HELPER_API=https://coach.example.com \
-  EDITING_HELPER_ACCESS_TOKEN="$EDITING_HELPER_ACCESS_TOKEN" npm start
-unset EDITING_HELPER_ACCESS_TOKEN
+cd desktop
+EDITING_HELPER_DEV_SETTINGS=1 npm start
 ```
 
-`EDITING_HELPER_API` overrides the saved URL for a single launch. `EDITING_HELPER_ACCESS_TOKEN` independently overrides the saved token for that process. The Gemini API key remains on the FastAPI backend, not the desktop.
+Open the pet's **Settings** and enter your Northflank HTTPS URL and your developer access token. The URL is saved in the local Electron config; the token remains encrypted separately with Electron safeStorage when GNOME Keyring/KWallet is available. Developer mode does not weaken the backend's authentication: it just restores the controls for your own testing.
+
+Do not share your `COACH_ACCESS_TOKEN`. The optional environment variables `EDITING_HELPER_API` and `EDITING_HELPER_ACCESS_TOKEN` still work for unpackaged local development.
+
+### Public/packaged releases
+
+Packaged Electron applications ignore saved developer URLs, saved developer tokens and developer environment-variable overrides. They read the **nonsecret** publisher API URL from `src/release-config.json`; the shared access token is never bundled in the app.
+
+`src/release-config.json` intentionally has an empty URL and `authentication: "not-configured"`. Until you implement *individual user authentication* on the desktop and enforce it in FastAPI, packaged public releases display a connection/setup error rather than trying to use the private shared-token server.
+
+**Do not set `authentication: "user-accounts"` just to bypass the startup warning.** Doing so does not implement sign-in or backend authorization. Do not disable `COACH_REQUIRE_AUTH` or distribute the server's shared token to make a public build work. Follow [PUBLIC_RELEASE.md](PUBLIC_RELEASE.md) first.
 
 ## Verification and scope
 
