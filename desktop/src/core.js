@@ -204,6 +204,8 @@ function parseResponse(status, buf) {
       title: sanitizeText(ref.title).trim(),
       url: url.href,
       source_kind: ref.source_kind === 'official' ? 'official' : 'community',
+      review_status: ref.review_status === 'source_checked' ? 'source_checked' : 'link_checked',
+      category: typeof ref.category === 'string' ? sanitizeText(ref.category).slice(0, 50) : 'general',
       version: typeof ref.version === 'string' ? sanitizeText(ref.version).slice(0, 20) : '',
     });
   }
