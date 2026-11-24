@@ -22,6 +22,11 @@ STUB = """
   window.__saveResult = {ok:true, restartNeeded:false};
   window.coach = {
     getConfig: async () => cfg,
+    authStatus: async () => ({publicMode:cfg.publicMode===true, configured:true, signedIn:false}),
+    requestSignInCode: async (email) => { calls.push(['sendCode',email]); return {ok:true}; },
+    verifySignInCode: async (email,code) => { calls.push(['verifyCode',email,code]); return {ok:true,email}; },
+    signOut: async () => { calls.push(['signOut']); return {ok:true}; },
+    openSignIn: () => calls.push(['openSignIn']),
     saveConfig: async (c) => { calls.push(['save', c]); return window.__saveResult; },
     ask: (q) => { calls.push(['ask', q]); return new Promise(r => { pending = r; }); },
     openSource: async (url) => { calls.push(['openSource', url]); return true; },
@@ -283,7 +288,23 @@ with sync_playwright() as pw:
                         query="?mode=settings", size=(460, 650))
     check("settings: unsafe Linux fallback cannot save a token",
           p.is_disabled("#accessToken") and "keyring unavailable" in p.inner_text("#tokenHint").lower())
+    p, errs = open_page("signin.html", cfg={"publicMode": True}, size=(440, 480))
+    check("signin: no service secrets in sign-in form",
+          p.is_visible("#email") and not p.locator("#accessToken").count()
+          and "Server address" not in p.inner_text("body"))
+    p.fill("#email", "video@example.com")
+    p.click("#send-code")
+    p.wait_for_timeout(80)
+    check("signin: email requests a one-time code",
+          ["sendCode", "video@example.com"] in p.evaluate("window.__calls")
+          and p.is_visible("#code"))
+    p.fill("#code", "123456")
+    p.click("#verify-code")
+    p.wait_for_timeout(80)
+    check("signin: verification submits only email and code",
+          ["verifyCode", "video@example.com", "123456"] in p.evaluate("window.__calls"))
     b.close()
+
 
 print("\nFAILED:" if fails else "\nALL UI CHECKS PASSED", fails if fails else "")
 sys.exit(1 if fails else 0)

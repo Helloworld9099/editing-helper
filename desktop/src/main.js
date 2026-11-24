@@ -4,6 +4,7 @@ const path = require('node:path');
 const core = require('./core');
 const credentials = require('./credentials');
 const releaseConfig = require('./release-config.json');
+const { makePublicAuth, releaseReady } = require('./public-auth');
 
 // Ubuntu defaults to Wayland, where apps cannot position their own windows or reliably stay
 // on top. Running through XWayland (X11) makes dragging and always-on-top work. Set
@@ -17,10 +18,13 @@ const MASCOT_SIZE = 80;
 const HIDE_MS = 10 * 60 * 1000;
 const forceNormal = process.argv.includes('--normal-window');
 // Settings for your local development environment only. Never available in packaged releases.
-const developerMode = !app.isPackaged && process.env.EDITING_HELPER_DEV_SETTINGS === '1';
+const publicMode = app.isPackaged || process.env.EDITING_HELPER_PUBLIC_PREVIEW === '1';
+const developerMode = !publicMode && process.env.EDITING_HELPER_DEV_SETTINGS === '1';
 const RENDERER = path.join(__dirname, '..', 'renderer');
 
-let cfgFile, tokenFile;
+let cfgFile, tokenFile, userSessionFile;
+let publicAuth = null;
+let signinWin = null;
 let cfg = { ...core.DEFAULTS };
 let savedAccessToken = '';
 let secureTokenStorageAvailable = false;
@@ -55,7 +59,7 @@ const publicConfig = () => {
   const { apiBaseUrl: _privateUrl, ...userSettings } = cfg;
   return {
     ...userSettings, normal, supportedApps: core.SUPPORTED_APPS,
-    upcomingApps: core.UPCOMING_APPS, developerMode,
+    upcomingApps: core.UPCOMING_APPS, developerMode, publicMode,
     ...(developerMode ? {
       apiBaseUrl: cfg.apiBaseUrl,
       accessTokenSaved: Boolean(savedAccessToken),
@@ -269,8 +273,52 @@ function openSettings(mode = 'settings') {
   });
 }
 
+// ----------------------------------------------------------- public sign-in
+function openSignin() {
+  if (!publicMode) return;
+  if (alive(signinWin)) { signinWin.show(); signinWin.focus(); return; }
+  signinWin = new BrowserWindow({
+    width: 440, height: 480, useContentSize: true,
+    title: 'Editing Coach: sign in', resizable: false, maximizable: false,
+    minimizable: false, fullscreenable: false, backgroundColor: '#f8faf7',
+    autoHideMenuBar: true, alwaysOnTop: false, webPreferences: prefs(),
+  });
+  signinWin.loadFile(path.join(RENDERER, 'signin.html'));
+  signinWin.on('closed', () => { signinWin = null; });
+}
+function notifyAccountChanged() {
+  if (alive(panel)) panel.webContents.send('panel:auth-changed');
+}
+
 // -------------------------------------------------------------- IPC
 function registerIpc() {
+  ipcMain.handle('auth:status', async (e) => {
+    if (!isOurs(e) && !isFrom(e, signinWin)) return null;
+    return publicMode ? { publicMode: true, ...publicAuth.status() } : { publicMode: false };
+  });
+  ipcMain.handle('auth:request-code', async (e, email) => {
+    if (!publicMode || !isFrom(e, signinWin)) return { ok: false, message: 'Not allowed.' };
+    try { await publicAuth.requestCode(email); return { ok: true }; }
+    catch (error) { return { ok: false, message: error.message }; }
+  });
+  ipcMain.handle('auth:verify-code', async (e, email, code) => {
+    if (!publicMode || !isFrom(e, signinWin)) return { ok: false, message: 'Not allowed.' };
+    try {
+      const status = await publicAuth.verifyCode(email, code);
+      notifyAccountChanged();
+      // Allow the IPC reply to reach the sign-in renderer before closing it.
+      setTimeout(() => { if (alive(signinWin)) signinWin.close(); }, 150);
+      return { ok: true, ...status };
+    } catch (error) { return { ok: false, message: error.message }; }
+  });
+  ipcMain.handle('auth:sign-out', async (e) => {
+    if (!publicMode || (!isOurs(e) && !isFrom(e, signinWin))) return { ok: false };
+    await publicAuth.signOut();
+    notifyAccountChanged();
+    return { ok: true };
+  });
+  ipcMain.on('auth:open', (e) => { if (isOurs(e)) openSignin(); });
+
   ipcMain.handle('config:get', async (e) => {
     if (!isOurs(e)) return null;
     // A user may have unlocked their Linux keyring since the app started.
@@ -346,7 +394,12 @@ function registerIpc() {
     if (!wasSetup && alive(panel)) panel.webContents.send('panel:config-changed');
     if (wasSetup && cfg.setupDone) normal = forceNormal || cfg.windowMode === 'normal';
     for (const w of [mascot, panel]) if (alive(w)) w.setAlwaysOnTop(cfg.keepOnTop, 'floating');
-    if (wasSetup && cfg.setupDone) { createMascot(); createPanel(); }   // before setup window closes
+    if (wasSetup && cfg.setupDone) {
+      createMascot(); createPanel();
+      if (publicMode && releaseReady(releaseConfig) && !publicAuth.status().signedIn) {
+        setTimeout(openSignin, 250);
+      }
+    }   // before setup window closes
     return { ok: true, restartNeeded };
   });
 
@@ -370,9 +423,16 @@ function registerIpc() {
     if (alive(mascot)) mascot.webContents.send('mascot:busy', true);
     let result;
     try {
-      const connection = app.isPackaged
-        ? core.managedConnection(releaseConfig)
+      let userToken = '';
+      if (publicMode && publicAuth.status().configured) {
+        userToken = await publicAuth.accessToken();
+      }
+      const connection = publicMode
+        ? core.managedConnection(releaseConfig, userToken)
         : core.activeConnection(cfg, savedAccessToken);
+      if (publicMode && connection.error && /Sign in to Editing Helper/.test(connection.error)) {
+        openSignin();
+      }
       result = connection.error
         ? { ok: false, kind: 'config', message: connection.error }
         : await core.postCoach({
@@ -387,6 +447,11 @@ function registerIpc() {
     } finally {
       busy = false;
       if (alive(mascot)) mascot.webContents.send('mascot:busy', false);
+    }
+    if (publicMode && result.kind === 'http' && /HTTP 401/.test(result.message || '')) {
+      await publicAuth.signOut();
+      notifyAccountChanged();
+      openSignin();
     }
     if (result.ok && Array.isArray(result.sources)) {
       for (const reference of result.sources) {
@@ -453,8 +518,15 @@ function registerIpc() {
   });
   ipcMain.on('mascot:menu', (e) => {
     if (!isFrom(e, mascot)) return;
+    const accountMenu = publicMode ? [
+      { label: publicAuth.status().signedIn ? 'Sign out' : 'Sign in',
+        click: () => publicAuth.status().signedIn
+          ? void publicAuth.signOut().then(notifyAccountChanged)
+          : openSignin() },
+    ] : [];
     Menu.buildFromTemplate([
       { label: 'Ask a question', click: openPanel },
+      ...accountMenu,
       { label: 'Settings…', click: () => openSettings('settings') },
       { label: 'Chat size', submenu: [
         { label: 'Compact (320 × 400)', click: () => setChatSize(320, 400) },
@@ -490,9 +562,16 @@ if (!app.requestSingleInstanceLock()) {
     Menu.setApplicationMenu(null);
     cfgFile = path.join(app.getPath('userData'), 'config.json');
     tokenFile = path.join(app.getPath('userData'), 'access-token.enc');
+    userSessionFile = path.join(app.getPath('userData'), 'user-session.enc');
     cfg = core.loadConfig(cfgFile);
+    if (publicMode) {
+      publicAuth = makePublicAuth({
+        config: releaseConfig, storageFile: userSessionFile, safeStorage,
+      });
+      await publicAuth.initialize();
+    }
     // Legacy developer token storage is never read or sent by a public packaged build.
-    if (!app.isPackaged) {
+    if (!publicMode) {
       secureTokenStorageAvailable = await credentials.canStoreToken(safeStorage);
       if (secureTokenStorageAvailable) {
         savedAccessToken = await credentials.readToken(tokenFile, safeStorage);
@@ -502,6 +581,9 @@ if (!app.requestSingleInstanceLock()) {
     registerIpc();
     screen.on('display-removed', reclampMascot);
     screen.on('display-metrics-changed', reclampMascot);
-    if (cfg.setupDone) { createMascot(); createPanel(); } else { openSettings('setup'); }
+    if (cfg.setupDone) {
+      createMascot(); createPanel();
+      if (publicMode && releaseReady(releaseConfig) && !publicAuth.status().signedIn) openSignin();
+    } else { openSettings('setup'); }
   });
 }

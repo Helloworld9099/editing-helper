@@ -32,11 +32,15 @@ curl -fsS http://127.0.0.1:8000/v1/coach \
   -d '{"question":"Reply with hello."}'
 ```
 
-## Developer connection and public distribution
+## Private development and public release
 
-Normal desktop Settings now hide server URL and shared-token fields. To edit your own Northflank connection locally, launch the unpackaged desktop with `EDITING_HELPER_DEV_SETTINGS=1 npm start`. Your existing saved connection still works with ordinary `npm start`.
+Your existing Northflank backend still works in `COACH_AUTH_MODE=shared` with `COACH_ACCESS_TOKEN`. Do **not** distribute that token. Normal desktop Settings hides both connection fields; for local developer configuration, run `EDITING_HELPER_DEV_SETTINGS=1 npm start`.
 
-For public builds, the API address is publisher-managed, not a user-facing setting, and no shared bearer token is shipped. This repo **does not yet have per-user login and backend authorization**, so packaged public access remains blocked until those are added. See [desktop/PUBLIC_RELEASE.md](desktop/PUBLIC_RELEASE.md) and [desktop/README.md](desktop/README.md).
+A separate public deployment now supports `COACH_AUTH_MODE=users`. In that mode, FastAPI verifies each signed-in user against Supabase Auth's `/auth/v1/user` endpoint and applies atomic Redis quotas **before** making any Gemini request. An Electron public release uses passwordless email OTP and stores only an encrypted per-user refresh token (or a temporary session if no secure keyring exists). No shared token is shipped.
+
+**External setup is still required:** create a Supabase Auth project with custom SMTP and a numeric OTP email template, provision Redis, deploy a separate Northflank public service with its environment variables, configure GitHub Actions public release variables, then build and test the installers. The checked-in release config is intentionally blank and fails closed until configured. Windows/macOS unsigned installers require signing/notarization before a general release.
+
+See [desktop/PUBLIC_RELEASE.md](desktop/PUBLIC_RELEASE.md) for step-by-step configuration and validation. The build-candidate workflow is `.github/workflows/build-public-installers.yml`.
 
 ## Editor knowledge base (RAG)
 
@@ -88,7 +92,7 @@ For Groq, use the following provider settings.
 | `COACH_MODEL` | A [Groq chat model ID](https://console.groq.com/docs/api-reference#chat-create), for example `llama-3.3-70b-versatile` |
 | `GROQ_API_KEY` | Your Groq API key, injected as a server secret |
 
-Gemini, Groq, and the production container require `COACH_ACCESS_TOKEN` at startup. For a hosted deployment outside Docker, `COACH_REQUIRE_AUTH=1` also makes the token mandatory with either local provider. Setting `COACH_ACCESS_TOKEN` protects `/v1/coach` with every provider.
+In the default private `COACH_AUTH_MODE=shared`, Gemini, Groq, and the production container require `COACH_ACCESS_TOKEN` at startup. A separate `COACH_AUTH_MODE=users` service instead requires verified Supabase accounts and shared Redis quotas; the old shared token is not used in this mode. For a hosted deployment outside Docker, `COACH_REQUIRE_AUTH=1` also makes the token mandatory with either local provider. Setting `COACH_ACCESS_TOKEN` protects `/v1/coach` with every provider.
 
 [.env.example](.env.example) shows the runtime settings. When running outside Northflank, export the settings in the environment that starts Uvicorn.
 
@@ -98,7 +102,7 @@ Use a Northflank command health check to probe the loopback address. [Northflank
 python -c 'from urllib.request import urlopen; urlopen("http://127.0.0.1:8000/health", timeout=2).close()'
 ```
 
-To connect Electron, set `EDITING_HELPER_API` to the HTTPS service URL and `EDITING_HELPER_ACCESS_TOKEN` to the server's `COACH_ACCESS_TOKEN` in the environment that launches Electron. See [desktop setup](desktop/README.md#connect-to-a-hosted-backend).
+To connect Electron, set `EDITING_HELPER_API` to the HTTPS service URL and `EDITING_HELPER_ACCESS_TOKEN` to the server's `COACH_ACCESS_TOKEN` in the environment that launches Electron. See [developer setup](desktop/README.md#connection-modes). Public releases use per-user email-code sign-in rather than the shared developer token.
 
 ## Backend tests
 
@@ -112,4 +116,4 @@ Tests use simulated Ollama, llama.cpp, Groq, and Gemini responses and cover acce
 
 - Existing frontend clients still work. Optional `editor` and `version` fields let a new client include the user's selected editor without changing the response.
 - The default development runner above is Ollama. The offline release path uses [llama.cpp](https://github.com/ggml-org/llama.cpp) with the same API and a pinned GGUF, without an Ollama account. Review [Ollama's eligibility terms](https://ollama.com/terms) before using its services.
-- See [training/README.md](training/README.md) to start a free-GPU smoke run, export and compare weights, and launch the actual desktop frontend. This branch provides a launcher, not an installer; the desktop frontend and checkpoint are separate inputs.
+- See [training/README.md](training/README.md) to start a free-GPU smoke run, export and compare weights, and launch the actual desktop frontend. A manual GitHub Actions workflow now builds unsigned Linux, Windows, and macOS installer candidates after public service configuration. Code signing and real-device verification are still required.
