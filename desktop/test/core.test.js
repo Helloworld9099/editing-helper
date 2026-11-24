@@ -197,6 +197,12 @@ test('credentials: normal launch uses persisted URL and token; env can override 
     baseUrl: 'https://saved-service.code.run',
     accessToken: 'override-token',
   });
+  assert.deepEqual(core.activeConnection(cfg, 'saved-token', {
+    EDITING_HELPER_API: 'https://new-service.code.run', EDITING_HELPER_ACCESS_TOKEN: 'explicit-token',
+  }), {
+    baseUrl: 'https://new-service.code.run',
+    accessToken: 'explicit-token',
+  });
 });
 
 test('config never stores bearer tokens even when passed extra fields', () => {
