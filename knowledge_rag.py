@@ -223,6 +223,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("validate", help="Validate source notes without writing a database")
+    commands.add_parser("stats", help="Show totals grouped by editor, topic, and evidence type")
     build = commands.add_parser("build", help="Create the SQLite FTS5 index")
     build.add_argument("--db", type=Path, default=index_path())
     query = commands.add_parser("search", help="Preview what Gemini would retrieve")
@@ -233,6 +234,22 @@ def main() -> None:
     args = parser.parse_args()
     if args.command == "validate":
         print(f"Validated {len(read_notes())} source-checked notes")
+    elif args.command == "stats":
+        from collections import Counter
+        entries = read_notes()
+        summary = {
+            "total": len(entries),
+            "by_editor": {name: {
+                "total": len(rows),
+                "source_checked": sum(e["review_status"] == "source_checked" for e in rows),
+                "link_checked": sum(e["review_status"] == "link_checked" for e in rows),
+                "official": sum(e["source_kind"] == "official" for e in rows),
+                "community": sum(e["source_kind"] == "community" for e in rows),
+                "by_category": dict(sorted(Counter(e["category"] for e in rows).items())),
+            } for name in sorted(SUPPORTED_EDITORS)
+              for rows in [[e for e in entries if e["editor"] == name]]},
+        }
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
     elif args.command == "build":
         print(f"Indexed {build_index(database=args.db)} notes into {args.db}")
     else:
