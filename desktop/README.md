@@ -92,6 +92,4 @@ The launch URL overrides **Server address** for that session and is where Electr
 
 Run `npm test` for the client tests. See [TESTING.md](TESTING.md)
 for renderer tests and the manual desktop checklist. Desktop rendering and
-mock replies do not establish model accuracy. Source retrieval, verified
-tutorials with a Sources footer, installers, and packaged weights are not
-implemented by this integration.
+mock replies do not establish model accuracy. Related source references appear when the backend retrieves reviewed knowledge notes; they do not guarantee that every generated step is correct. A fully verified tutorial library, screen capture, installers, and packaged weights are not implemented by this integration. For adding documentation notes, see [knowledge/README.md](../knowledge/README.md).

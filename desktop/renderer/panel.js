@@ -22,7 +22,7 @@
   }
 
   // Only AI replies use sanitized Markdown; user input and errors remain literal text.
-  function addMessage(kind, who, text) {
+  function addMessage(kind, who, text, sources = []) {
     const el = document.createElement('div');
     el.className = 'msg ' + kind;
     if (who) {
@@ -49,6 +49,38 @@
       body.textContent = text;
     }
     el.appendChild(body);
+    if (kind === 'coach') {
+      const refs = Array.isArray(sources) ? sources : [];
+      const foot = document.createElement('div');
+      foot.className = 'source-foot';
+      if (refs.length) {
+        const reviewed = refs.filter(ref => ref.review_status === 'source_checked');
+        const linkOnly = refs.filter(ref => ref.review_status !== 'source_checked');
+        for (const [group, labelText] of [
+          [reviewed, 'Source-reviewed notes'],
+          [linkOnly, 'Further reading (links only)'],
+        ]) {
+          if (!group.length) continue;
+          const label = document.createElement('div');
+          label.className = 'source-label';
+          label.textContent = labelText;
+          foot.appendChild(label);
+          for (const ref of group) {
+            const button = document.createElement('button');
+            button.className = 'source-link';
+            button.type = 'button';
+            button.textContent = (ref.source_kind === 'official' ? 'Official: ' : 'Community: ') + ref.title;
+            button.title = 'Open original reference in your browser';
+            button.setAttribute('aria-label', 'Open source: ' + ref.title);
+            button.addEventListener('click', () => { void api.openSource(ref.url); });
+            foot.appendChild(button);
+          }
+        }
+      } else {
+        foot.textContent = 'AI guidance · no matching documentation found';
+      }
+      el.appendChild(foot);
+    }
     if (kind === 'error') el.setAttribute('role', 'alert');
     log.appendChild(el);
     if (kind !== 'note') {
@@ -87,7 +119,7 @@
     }
     setBusy(false);
     if (result && result.ok) {
-      addMessage('coach', 'Coach', result.answer);
+      addMessage('coach', 'Coach', result.answer, result.sources);
     } else {
       addMessage('error', null, (result && result.message) || 'Something went wrong. Try again.');
       if (!input.value.trim()) input.value = q;   // let the user retry without retyping
@@ -136,6 +168,7 @@
   clearBtn.addEventListener('click', () => {
     if (busy || messageCount === 0) return;
     log.replaceChildren();
+    api.clearSources?.();
     messageCount = 0;
     examples.hidden = false;
     input.value = '';
@@ -155,7 +188,7 @@
     try { cfg = await api.getConfig(); } catch { /* show the generic guidance */ }
     const app = cfg && cfg.editor ? cfg.editor + (cfg.editorVersion ? ' ' + cfg.editorVersion : '') : '';
     const prior = log.querySelector('.note');
-    const note = app ? `Ask about ${app}. Answers aren't checked against sources yet.` : 'Choose your editor in Settings.';
+    const note = app ? `Ask about ${app}. Related references appear when available; other advice is unverified.` : 'Choose your editor in Settings.';
     if (prior) prior.querySelector('.body').textContent = note;
     else addMessage('note', null, note);
   }

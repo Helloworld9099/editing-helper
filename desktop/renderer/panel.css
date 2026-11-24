@@ -104,6 +104,23 @@ body[data-panel-side="left"]::after { left: auto; right: 3px; }
 .msg.coach .body th, .msg.coach .body td { padding: 5px 6px; border: 1px solid #c8ded3; text-align: left; }
 .msg.coach .body th { background: #e8f4ee; font-weight: 700; }
 
+.msg.coach .source-foot {
+  margin-top: 9px; padding-top: 8px; border-top: 1px solid #dcebe5;
+  color: #5c7770; font-size: 10.5px; line-height: 1.4;
+}
+.msg.coach .source-label {
+  color: #366a62; font-size: 10px; text-transform: uppercase;
+  font-weight: 750; letter-spacing: .055em; margin-bottom: 5px;
+}
+.msg.coach .source-link {
+  display: block; max-width: 100%; margin: 4px 0 0; padding: 4px 0;
+  border: 0; background: transparent; color: #166f66;
+  cursor: pointer; font: inherit; text-align: left; text-decoration: underline;
+  overflow-wrap: anywhere;
+}
+.msg.coach .source-link:hover { color: #104e4a; }
+.msg.coach .source-link:focus-visible { outline: 2px solid #18796e; border-radius: 3px; }
+
 .msg.error { max-width: 100%; color: var(--error); background: var(--error-bg); border: 1px solid #edc8c5; }
 .msg.note { max-width: 290px; padding: 8px 6px; border: 0; background: none; text-align: center; }
 .msg.note h2 { font-size: 18px; line-height: 1.2; margin: 11px 0 7px; font-weight: 760; letter-spacing: -.035em; color: #214642; }

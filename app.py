@@ -1,7 +1,11 @@
 """Editing Helper API for local models, Groq, and Google Gemini."""
 import asyncio
+import logging
 import os
 import re
+import sqlite3
+
+from knowledge_rag import SYSTEM_GUIDANCE, index_path, prompt_context, search_notes
 from contextlib import asynccontextmanager
 from secrets import compare_digest
 
@@ -37,8 +41,20 @@ class CoachRequest(BaseModel):
         return value.strip() if isinstance(value, str) else value
 
 
+class CoachSource(BaseModel):
+    id: str
+    title: str
+    url: str
+    editor: str
+    version: str
+    source_kind: str
+    review_status: str = "link_checked"
+    category: str = "general"
+
+
 class CoachReply(BaseModel):
     answer: str
+    sources: list[CoachSource] | None = None
 
 
 def gemini_answer(result):
@@ -60,6 +76,13 @@ def create_app(*, model=None, timeout=60.0, transport=None, provider=None):
     groq = provider == "groq"
     gemini = provider == "gemini"
     hosted = groq or gemini
+    rag_setting = os.environ.get("COACH_RAG_ENABLED", "0").strip()
+    if rag_setting not in {"0", "1"}:
+        raise ValueError("COACH_RAG_ENABLED must be 0 or 1.")
+    rag_enabled = rag_setting == "1"
+    knowledge_db = index_path()
+    if rag_enabled and not knowledge_db.is_file():
+        raise ValueError("Knowledge index is missing. Run 'python knowledge_rag.py build'.")
     if model is None:
         default_model = {"groq": "", "gemini": DEFAULT_GEMINI_MODEL}.get(provider, DEFAULT_MODEL)
         model = os.environ.get("COACH_MODEL", default_model)
@@ -126,7 +149,7 @@ def create_app(*, model=None, timeout=60.0, transport=None, provider=None):
         # Liveness is independent of model availability.
         return {"status": "ok"}
 
-    @api.post("/v1/coach", response_model=CoachReply,
+    @api.post("/v1/coach", response_model=CoachReply, response_model_exclude_none=True,
               dependencies=[Depends(require_access_token)] if access_token else [])
     async def coach(body: CoachRequest, request: Request):
         slot = request.app.state.slot
@@ -135,18 +158,32 @@ def create_app(*, model=None, timeout=60.0, transport=None, provider=None):
         async with slot:
             try:
                 async with asyncio.timeout(timeout):
+                    notes = []
+                    if rag_enabled and body.editor:
+                        try:
+                            notes = search_notes(body.question, body.editor.strip(),
+                                                 body.version or "", database=knowledge_db)
+                        except sqlite3.Error:
+                            logging.getLogger(__name__).exception("Knowledge index search failed")
+                            # The coach can still answer, but may not claim source support.
                     question = body.question
                     if body.editor:
                         question = f"Editor: {body.editor.strip()}\n"
                         if body.version:
                             question += f"Version: {body.version.strip()}\n"
                         question += body.question
+                    model_question = question + prompt_context(notes)
                     if gemini:
-                        payload = {"contents": [{"role": "user", "parts": [{"text": question}]}]}
+                        payload = {"contents": [{"role": "user", "parts": [{"text": model_question}]}]}
+                        if rag_enabled:
+                            payload["systemInstruction"] = {"parts": [{"text": SYSTEM_GUIDANCE}]}
                     else:
+                        messages = [{"role": "user", "content": model_question}]
+                        if rag_enabled:
+                            messages.insert(0, {"role": "system", "content": SYSTEM_GUIDANCE})
                         payload = {
                             "model": model,
-                            "messages": [{"role": "user", "content": question}],
+                            "messages": messages,
                             "stream": False,
                             **limits,
                         }
@@ -171,7 +208,12 @@ def create_app(*, model=None, timeout=60.0, transport=None, provider=None):
                 raise HTTPException(502, f"{engine} could not answer this request.") from None
             except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError):
                 raise HTTPException(502, f"Could not read a valid reply from {engine}.") from None
-        return CoachReply(answer=answer)
+        return CoachReply(answer=answer, sources=[
+            CoachSource(id=n["id"], title=n["title"], url=n["url"],
+                        editor=n["editor"], version=n["version"],
+                        source_kind=n["source_kind"],
+                        review_status=n["review_status"], category=n["category"]) for n in notes
+        ] or None)
 
     return api
 

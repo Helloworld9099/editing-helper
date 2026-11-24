@@ -32,6 +32,23 @@ curl -fsS http://127.0.0.1:8000/v1/coach \
   -d '{"question":"Reply with hello."}'
 ```
 
+## Editor knowledge base (RAG)
+
+When enabled, Editing Helper searches an **offline-built SQLite FTS5 index** containing **3,066 editor-specific records** across all 11 supported editors: 55 short, original source-reviewed summaries plus 3,011 navigation-only links to official manuals and public community sources. A supplemental source import added 1,689 links after removing 30 canonical URL duplicates. These are **not 3,066 verified tutorials**: link-only entries point to sources but do not establish any specific editing procedure. Records are organized by editor folder, topic category, software version and source type.
+
+The API preserves the original answer field and optionally returns a sources array with source-review level and topic. The desktop distinguishes "Source-reviewed notes" from "Further reading (links only)" with safe click-to-open HTTPS links. A source link means a relevant record was retrieved, **not** that all generated instructions have been physically verified.
+
+For local use, build the index and explicitly enable RAG before starting FastAPI:
+
+~~~bash
+python3 knowledge_rag.py validate
+python3 knowledge_rag.py stats
+python3 knowledge_rag.py build
+COACH_RAG_ENABLED=1 .venv/bin/python -m uvicorn app:app --host 127.0.0.1 --port 8000
+~~~
+
+Northflank builds and enables the index automatically through the root Dockerfile. No extra hosting/database accounts or embedding API are required. For adding documentation or permitted, reviewed forum summaries, see [knowledge/README.md](knowledge/README.md). The index is generated and should not be committed.
+
 ## Model and scope
 
 Change `COACH_MODEL` in the server's environment and restart to try a different already-installed local model. Local development defaults to Ollama and accepts `localhost` and `127.0.0.1`. Keep local services bound to loopback and leave `COACH_ACCESS_TOKEN` unset for token-free use. The offline launcher uses llama.cpp.
@@ -83,7 +100,7 @@ To connect Electron, set `EDITING_HELPER_API` to the HTTPS service URL and `EDIT
 .venv/bin/python -m unittest discover -s tests -v
 ```
 
-Tests use simulated Ollama, llama.cpp, Groq, and Gemini responses and cover access tokens, allowed hosts, public health checks, and upstream errors.
+Tests use simulated Ollama, llama.cpp, Groq, and Gemini responses and cover access tokens, allowed hosts, public health checks, upstream errors, knowledge retrieval, and Gemini context injection.
 
 ## Local desktop build and training
 

@@ -57,6 +57,25 @@ test('rejects access tokens over plain HTTP to non-loopback hosts', async () => 
   assert.match(r.message, /HTTPS/);
 });
 
+test('only HTTPS source references are surfaced to the renderer', () =>
+  withServer((req, res) => json(res, 200, {
+    answer: 'A working answer',
+    sources: [
+      {title: 'Kdenlive Manual', url: 'https://docs.kdenlive.org/en/effects_and_filters.html',
+       source_kind: 'official', version: '26.08'},
+      {title: 'Unsafe', url: 'javascript:alert(1)', source_kind: 'official'},
+      {title: 'Plain HTTP', url: 'http://example.com', source_kind: 'official'},
+      {title: 'Embedded credentials', url: 'https://user:pass@example.com', source_kind: 'official'},
+    ],
+  }), async (s) => {
+    const reply = await core.postCoach({ baseUrl: s.url, question: 'Help with effects' });
+    assert.equal(reply.ok, true);
+    assert.equal(reply.sources.length, 1);
+    assert.equal(reply.sources[0].title, 'Kdenlive Manual');
+    assert.equal(reply.sources[0].source_kind, 'official');
+    assert.equal(reply.sources[0].version, '26.08');
+  }));
+
 test('offline: connection refused', async () => {
   const s = await startServer(() => {});
   const url = s.url; s.srv.close();

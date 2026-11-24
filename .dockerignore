@@ -2,3 +2,9 @@
 !Dockerfile
 !requirements.txt
 !app.py
+!knowledge_rag.py
+!knowledge/
+!knowledge/sources/
+!knowledge/sources/*.jsonl
+!knowledge/sources/**/
+!knowledge/sources/**/*.jsonl

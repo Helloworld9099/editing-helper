@@ -49,6 +49,10 @@ Then point Settings back to `http://127.0.0.1:8000` and try your real FastAPI ba
 
 Choose a different editor in Settings and verify that the app remembers the choice after restarting. Repeat a short question with Kdenlive, Adobe Premiere Pro, and one web-based editor (Clipchamp or Canva). Verify that the selected name and optional version reach the mock backend in the returned message. The app provides AI guidance, not verified instructions or direct control of an editing program. The unit tests check all eleven editor names and verify that unsupported values are rejected before making a request.
 
+### RAG reference check
+
+With the RAG-enabled Northflank backend, select Kdenlive and optionally version 26.08, then ask about the Broken TV glitch. A related Kdenlive manual reference button should appear; clicking it should open the original HTTPS documentation in the browser only after you click. Test DaVinci Resolve 20 with Dynamic Zoom. An unrelated editor should not show the Kdenlive or Resolve documentation as its own source.
+
 ### Window behavior checklist (what only your laptop can answer)
 
 Open any other app (a text editor, browser, your video editor, anything) and verify:
