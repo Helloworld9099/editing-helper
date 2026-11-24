@@ -161,10 +161,16 @@ function panelPosition(m, panel, area, gap = 4, margin = 8, preferredSide = null
 
 // A launch override may change the URL or token independently; otherwise use saved values.
 function activeConnection(cfg, savedToken = '', env = process.env) {
-  return {
-    baseUrl: env.EDITING_HELPER_API || cfg.apiBaseUrl,
-    accessToken: env.EDITING_HELPER_ACCESS_TOKEN || savedToken,
-  };
+  const baseUrl = env.EDITING_HELPER_API || cfg.apiBaseUrl;
+  // Never silently send an OS-stored token to an overridden, different host.
+  // Explicit env tokens remain intentional and take precedence.
+  let accessToken = env.EDITING_HELPER_ACCESS_TOKEN || '';
+  if (!accessToken && savedToken) {
+    try {
+      if (new URL(baseUrl).origin === new URL(cfg.apiBaseUrl).origin) accessToken = savedToken;
+    } catch { /* invalid URL is reported by postCoach */ }
+  }
+  return { baseUrl, accessToken };
 }
 
 // ------------------------------------------------------------ API client
