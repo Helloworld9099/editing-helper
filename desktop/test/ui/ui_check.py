@@ -288,8 +288,6 @@ with sync_playwright() as pw:
                         query="?mode=settings", size=(460, 650))
     check("settings: unsafe Linux fallback cannot save a token",
           p.is_disabled("#accessToken") and "keyring unavailable" in p.inner_text("#tokenHint").lower())
-    b.close()
-
     p, errs = open_page("signin.html", cfg={"publicMode": True}, size=(440, 480))
     check("signin: no service secrets in sign-in form",
           p.is_visible("#email") and not p.locator("#accessToken").count()
