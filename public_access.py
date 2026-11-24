@@ -56,6 +56,29 @@ class PublicAccess:
         self.user_per_day = positive_limit("COACH_USER_PER_DAY", 30)
         self.ip_per_minute = positive_limit("COACH_IP_PER_MINUTE", 180)
         self.global_per_day = positive_limit("COACH_GLOBAL_PER_DAY", 1000)
+        self.auth_lookups_ip_per_minute = positive_limit("COACH_AUTH_LOOKUPS_IP_PER_MINUTE", 100)
+        self.auth_lookups_global_per_minute = positive_limit("COACH_AUTH_LOOKUPS_GLOBAL_PER_MINUTE", 2500)
+
+    async def throttle_identity_lookup(self, request: Request) -> None:
+        # Protect Supabase /auth/v1/user from unlimited fabricated-JWT probes.
+        now = datetime.now(timezone.utc).strftime("%Y%m%d%H%M")
+        ip = request.client.host if request.client else "unknown"
+        ip_id = hashlib.sha256(ip.encode("utf-8")).hexdigest()[:22]
+        keys = [
+            f"{{coach-quota}}:auth:ip:{ip_id}:minute:{now}",
+            f"{{coach-quota}}:auth:global:minute:{now}",
+        ]
+        try:
+            allowed = await self.redis.eval(
+                QUOTA_SCRIPT, 2, *keys,
+                self.auth_lookups_ip_per_minute, self.auth_lookups_global_per_minute,
+                120, 120,
+            )
+        except Exception:
+            raise HTTPException(503, "Usage limits are temporarily unavailable.") from None
+        if allowed != 1:
+            raise HTTPException(429, "Too many authentication attempts.",
+                                headers={"Retry-After": "60"})
 
     async def authenticate(self, token: str, client: httpx.AsyncClient) -> str:
         if not isinstance(token, str) or len(token) > 8192 or not re.fullmatch(
