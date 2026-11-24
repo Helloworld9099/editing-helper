@@ -26,6 +26,8 @@
     saveBtn.disabled = true;
     return;
   }
+  const developerMode = cfg.developerMode === true;
+  document.body.dataset.developer = String(developerMode);
   const supported = cfg.supportedApps;
   for (const name of supported) editor.add(new Option(name, name));
   const upcoming = document.createElement('optgroup');
@@ -39,40 +41,44 @@
   if (upcoming.children.length) editor.appendChild(upcoming);
   editor.value = supported.includes(cfg.editor) ? cfg.editor : '';
   version.value = cfg.editorVersion;
-  url.value = cfg.apiBaseUrl;
   onTop.checked = cfg.keepOnTop;
   normalMode.checked = cfg.windowMode === 'normal';
 
-  if (cfg.accessTokenSaved) {
-    tokenHint.textContent = 'An encrypted access token is saved on this computer. Leave the field blank to keep it.';
-  } else if (cfg.canSaveAccessToken) {
-    tokenHint.textContent = 'Enter the token once to store it with your operating system keyring.';
-  } else {
-    tokenHint.textContent = 'Secure keyring unavailable. Unlock GNOME Keyring/KWallet to save a token, or use the launch environment variables.';
-    accessToken.disabled = true;
-  }
-  if (cfg.environmentTokenActive) {
-    tokenHint.textContent += ' A launch environment token currently overrides the saved token.';
-  }
-  forgetToken.disabled = !cfg.accessTokenSaved;
-  forgetToken.addEventListener('change', () => {
-    accessToken.disabled = Boolean(forgetToken.checked) || !cfg.canSaveAccessToken;
-    if (forgetToken.checked) accessToken.value = '';
-  });
+  // The public Settings window has no editable backend URL or shared token.
+  if (developerMode) {
+    url.value = cfg.apiBaseUrl || '';
 
-  function warnText(raw) {
-    try {
-      const u = new URL(raw.trim());
-      const h = u.hostname.replace(/^\[|\]$/g, '').toLowerCase();
-      const loop = h === 'localhost' || h === '::1' || /^127\.(?:\d{1,3}\.){2}\d{1,3}$/.test(h);
-      if (u.protocol === 'http:' && !loop) {
-        return 'Plain http:// sends your questions unencrypted. Prefer https:// for a hosted server.';
-      }
-    } catch { /* not a URL yet */ }
-    return '';
+    if (cfg.accessTokenSaved) {
+      tokenHint.textContent = 'An encrypted access token is saved on this computer. Leave the field blank to keep it.';
+    } else if (cfg.canSaveAccessToken) {
+      tokenHint.textContent = 'Enter the token once to store it with your operating system keyring.';
+    } else {
+      tokenHint.textContent = 'Secure keyring unavailable. Unlock GNOME Keyring/KWallet to save a token, or use the launch environment variables.';
+      accessToken.disabled = true;
+    }
+    if (cfg.environmentTokenActive) {
+      tokenHint.textContent += ' A launch environment token currently overrides the saved token.';
+    }
+    forgetToken.disabled = !cfg.accessTokenSaved;
+    forgetToken.addEventListener('change', () => {
+      accessToken.disabled = Boolean(forgetToken.checked) || !cfg.canSaveAccessToken;
+      if (forgetToken.checked) accessToken.value = '';
+    });
+
+    function warnText(raw) {
+      try {
+        const u = new URL(raw.trim());
+        const h = u.hostname.replace(/^\\[|\\]$/g, '').toLowerCase();
+        const loop = h === 'localhost' || h === '::1' || /^127\\.(?:\\d{1,3}\\.){2}\\d{1,3}$/.test(h);
+        if (u.protocol === 'http:' && !loop) {
+          return 'Plain http:// sends your questions unencrypted. Prefer https:// for a hosted server.';
+        }
+      } catch { /* not a URL yet */ }
+      return '';
+    }
+    url.addEventListener('input', () => { $('urlWarn').textContent = warnText(url.value); });
+    $('urlWarn').textContent = warnText(url.value);
   }
-  url.addEventListener('input', () => { $('urlWarn').textContent = warnText(url.value); });
-  $('urlWarn').textContent = warnText(url.value);
 
   let saving = false;
   $('form').addEventListener('submit', async (e) => {
@@ -89,10 +95,16 @@
     const payload = { editor: editor.value.trim(), editorVersion: version.value, finishSetup: mode === 'setup' };
     if (mode === 'settings') {
       Object.assign(payload, {
-        apiBaseUrl: url.value, keepOnTop: onTop.checked,
+        keepOnTop: onTop.checked,
         windowMode: normalMode.checked ? 'normal' : 'floating',
-        accessToken: accessToken.value, forgetAccessToken: forgetToken.checked,
       });
+      if (developerMode) {
+        Object.assign(payload, {
+          apiBaseUrl: url.value,
+          accessToken: accessToken.value,
+          forgetAccessToken: forgetToken.checked,
+        });
+      }
     }
     let res;
     try { res = await api.saveConfig(payload); }
