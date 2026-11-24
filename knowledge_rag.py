@@ -163,18 +163,32 @@ def search_notes(question: str, editor: str, version: str = "", *,
                n.note, n.source_url, n.source_kind, n.review_status, n.category
                FROM note_fts JOIN notes AS n ON note_fts.rowid = n.rowid
                WHERE note_fts MATCH ? AND n.editor = ?
-               ORDER BY bm25(note_fts, 3.0, 2.0, 2.0) LIMIT 80""",
+               ORDER BY bm25(note_fts, 3.0, 2.0, 2.0) LIMIT 200""",
                (expression, editor)).fetchall()
-    found = []
+
+    # A source-checked paraphrase is useful evidence for an actual answer.
+    # A link-only record is ONLY a further-reading pointer, not step-by-step proof.
+    # Keep both when available, deduplicating on the original URL.
+    reviewed, links = [], []
     for id_, editor_, version_, title, note, url, kind, review, category in rows:
         if not matches_version(version_, version):
             continue
-        found.append({"id": id_, "editor": editor_, "version": version_, "title": title,
-                      "note": note, "url": url, "source_kind": kind,
-                      "review_status": review, "category": category})
-        if len(found) == min(max(1, limit), 5):
+        item = {"id": id_, "editor": editor_, "version": version_, "title": title,
+                "note": note, "url": url, "source_kind": kind,
+                "review_status": review, "category": category}
+        (reviewed if review == "source_checked" else links).append(item)
+
+    limit = min(max(1, limit), 5)
+    output, seen = [], set()
+    # Prefer reviewed notes, leaving room for new documentation discovery links.
+    for item in reviewed[:limit] + links:
+        if item["url"] in seen:
+            continue
+        output.append(item)
+        seen.add(item["url"])
+        if len(output) == limit:
             break
-    return found
+    return output
 
 
 def prompt_context(notes: list[dict]) -> str:
