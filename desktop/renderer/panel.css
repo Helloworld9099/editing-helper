@@ -75,6 +75,35 @@ body[data-panel-side="left"]::after { left: auto; right: 3px; }
   box-shadow: 0 1px 3px rgba(18,58,52,.045);
 }
 .msg.coach .who { color: #1c756b; }
+
+/* Compact rendered Markdown stays readable in the narrow floating chat bubble. */
+.msg.coach .body { white-space: normal; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.msg.coach .body > :first-child { margin-top: 0; }
+.msg.coach .body > :last-child { margin-bottom: 0; }
+.msg.coach .body p { margin: 0 0 .7em; }
+.msg.coach .body h1, .msg.coach .body h2, .msg.coach .body h3,
+.msg.coach .body h4, .msg.coach .body h5, .msg.coach .body h6 {
+  line-height: 1.3; font-weight: 750; color: #204b45; margin: 1em 0 .4em;
+}
+.msg.coach .body h1 { font-size: 16px; }
+.msg.coach .body h2 { font-size: 14px; }
+.msg.coach .body h3, .msg.coach .body h4,
+.msg.coach .body h5, .msg.coach .body h6 { font-size: 12.5px; }
+.msg.coach .body ul, .msg.coach .body ol { margin: .3em 0 .7em; padding-left: 1.6em; }
+.msg.coach .body li { margin: .25em 0; }
+.msg.coach .body li > p { margin: 0 0 .3em; }
+.msg.coach .body strong { font-weight: 750; }
+.msg.coach .body a { color: #176d68; text-decoration: underline; overflow-wrap: anywhere; }
+.msg.coach .body code { padding: .08em .26em; border-radius: 4px; background: #e8f2ee; font-size: .95em; }
+.msg.coach .body pre { max-width: 100%; margin: .6em 0; padding: 9px; border-radius: 7px; overflow-x: auto;
+  background: #e8f2ee; font-size: 11px; line-height: 1.5; white-space: pre; }
+.msg.coach .body pre code { padding: 0; background: none; }
+.msg.coach .body blockquote { margin: .6em 0; padding: .15em 0 .15em 10px; border-left: 3px solid #80b6aa; color: #4e6862; }
+.msg.coach .body hr { border: 0; border-top: 1px solid #d5e6de; margin: .85em 0; }
+.msg.coach .body table { display: block; overflow-x: auto; max-width: 100%; border-collapse: collapse; margin: .5em 0; }
+.msg.coach .body th, .msg.coach .body td { padding: 5px 6px; border: 1px solid #c8ded3; text-align: left; }
+.msg.coach .body th { background: #e8f4ee; font-weight: 700; }
+
 .msg.error { max-width: 100%; color: var(--error); background: var(--error-bg); border: 1px solid #edc8c5; }
 .msg.note { max-width: 290px; padding: 8px 6px; border: 0; background: none; text-align: center; }
 .msg.note h2 { font-size: 18px; line-height: 1.2; margin: 11px 0 7px; font-weight: 760; letter-spacing: -.035em; color: #214642; }
