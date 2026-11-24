@@ -58,7 +58,7 @@ mode uses regular framed windows. Windows and macOS are not verified.
 Set **Server address** back to `http://127.0.0.1:8000`. See the
 [root README](../README.md) to start the local API and a runner. The desktop
 makes requests in Electron's main process, so no CORS change is needed.
-The request shape is `{"question":"...", "editor":"DaVinci Resolve", "version":"20.1"}`
+AI responses are rendered as sanitized Markdown in the chat bubble. Headings, lists, bold text, and code blocks display normally; potentially unsafe HTML and images are discarded. User messages and error messages are kept as literal text.\n\nThe request shape is `{"question":"...", "editor":"DaVinci Resolve", "version":"20.1"}`
 (version optional); the response is `{"answer":"..."}`.
 
 The existing launcher can start the local GGUF runner, API and desktop
