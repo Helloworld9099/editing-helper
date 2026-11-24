@@ -56,13 +56,13 @@
       if (refs.length) {
         const label = document.createElement('div');
         label.className = 'source-label';
-        label.textContent = 'Related documentation';
+        label.textContent = 'Related references';
         foot.appendChild(label);
         for (const ref of refs) {
           const button = document.createElement('button');
           button.className = 'source-link';
           button.type = 'button';
-          button.textContent = ref.title;
+          button.textContent = (ref.source_kind === 'official' ? 'Official: ' : 'Community: ') + ref.title;
           button.title = 'Open original reference in your browser';
           button.setAttribute('aria-label', 'Open source: ' + ref.title);
           button.addEventListener('click', () => { void api.openSource(ref.url); });
@@ -180,7 +180,7 @@
     try { cfg = await api.getConfig(); } catch { /* show the generic guidance */ }
     const app = cfg && cfg.editor ? cfg.editor + (cfg.editorVersion ? ' ' + cfg.editorVersion : '') : '';
     const prior = log.querySelector('.note');
-    const note = app ? `Ask about ${app}. Related official references appear when available; other advice is unverified.` : 'Choose your editor in Settings.';
+    const note = app ? `Ask about ${app}. Related references appear when available; other advice is unverified.` : 'Choose your editor in Settings.';
     if (prior) prior.querySelector('.body').textContent = note;
     else addMessage('note', null, note);
   }
