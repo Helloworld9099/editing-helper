@@ -22,7 +22,7 @@
   }
 
   // Only AI replies use sanitized Markdown; user input and errors remain literal text.
-  function addMessage(kind, who, text) {
+  function addMessage(kind, who, text, sources = []) {
     const el = document.createElement('div');
     el.className = 'msg ' + kind;
     if (who) {
@@ -49,6 +49,30 @@
       body.textContent = text;
     }
     el.appendChild(body);
+    if (kind === 'coach') {
+      const refs = Array.isArray(sources) ? sources : [];
+      const foot = document.createElement('div');
+      foot.className = 'source-foot';
+      if (refs.length) {
+        const label = document.createElement('div');
+        label.className = 'source-label';
+        label.textContent = 'Related documentation';
+        foot.appendChild(label);
+        for (const ref of refs) {
+          const button = document.createElement('button');
+          button.className = 'source-link';
+          button.type = 'button';
+          button.textContent = ref.title;
+          button.title = 'Open original reference in your browser';
+          button.setAttribute('aria-label', 'Open source: ' + ref.title);
+          button.addEventListener('click', () => { void api.openSource(ref.url); });
+          foot.appendChild(button);
+        }
+      } else {
+        foot.textContent = 'AI guidance · no matching documentation found';
+      }
+      el.appendChild(foot);
+    }
     if (kind === 'error') el.setAttribute('role', 'alert');
     log.appendChild(el);
     if (kind !== 'note') {
@@ -87,7 +111,7 @@
     }
     setBusy(false);
     if (result && result.ok) {
-      addMessage('coach', 'Coach', result.answer);
+      addMessage('coach', 'Coach', result.answer, result.sources);
     } else {
       addMessage('error', null, (result && result.message) || 'Something went wrong. Try again.');
       if (!input.value.trim()) input.value = q;   // let the user retry without retyping
@@ -136,6 +160,7 @@
   clearBtn.addEventListener('click', () => {
     if (busy || messageCount === 0) return;
     log.replaceChildren();
+    api.clearSources?.();
     messageCount = 0;
     examples.hidden = false;
     input.value = '';
