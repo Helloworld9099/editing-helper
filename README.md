@@ -34,14 +34,15 @@ curl -fsS http://127.0.0.1:8000/v1/coach \
 
 ## Editor knowledge base (RAG)
 
-When enabled, Editing Helper searches an **offline-built SQLite FTS5 index** of reviewed, paraphrased documentation notes before asking the model. There are 14 starter notes linked to original DaVinci Resolve 20 and Kdenlive 26.08 documentation. The remaining editors can still receive AI guidance, but do not have indexed references yet.
+When enabled, Editing Helper searches an **offline-built SQLite FTS5 index** containing **1,377 organized editor-specific references** across all 11 supported editors: 55 short, original source-reviewed summaries plus 1,322 navigation-only links to official manuals and community discussions. These are **not 1,377 verified tutorials**: link-only entries point to sources but do not establish any specific editing procedure. Records are organized by editor folder, topic category, software version and source type.
 
-The API preserves the original answer field and optionally returns a sources array with related documentation. The desktop displays those references as safe click-to-open links. A source link means a relevant note was retrieved, **not** that all generated instructions have been physically verified.
+The API preserves the original answer field and optionally returns a sources array with source-review level and topic. The desktop distinguishes "Source-reviewed notes" from "Further reading (links only)" with safe click-to-open HTTPS links. A source link means a relevant record was retrieved, **not** that all generated instructions have been physically verified.
 
 For local use, build the index and explicitly enable RAG before starting FastAPI:
 
 ~~~bash
 python3 knowledge_rag.py validate
+python3 knowledge_rag.py stats
 python3 knowledge_rag.py build
 COACH_RAG_ENABLED=1 .venv/bin/python -m uvicorn app:app --host 127.0.0.1 --port 8000
 ~~~
