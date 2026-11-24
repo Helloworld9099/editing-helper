@@ -17,6 +17,7 @@ STUB = """
   window.__calls = calls; window.__closed = false;
   window.close = () => { window.__closed = true; };
   window.__emit = (ch, p) => (listeners[ch] || []).forEach(f => f(p));
+  window.__selectEditor = (name, version = '') => { cfg.editor = name; cfg.editorVersion = version; window.__emit('panel:config-changed'); };
   window.__resolveAsk = (r) => pending && pending(r);
   window.__saveResult = {ok:true, restartNeeded:false};
   window.coach = {
@@ -75,6 +76,11 @@ with sync_playwright() as pw:
           minimum.evaluate("(() => {const s=document.querySelector('#send').getBoundingClientRect(); return document.documentElement.scrollWidth <= innerWidth && s.bottom <= innerHeight;})()"))
     check("panel: welcome note mentions app and says not verified",
           "DaVinci Resolve 20.1" in p.inner_text("#log") and "aren't checked against sources" in p.inner_text("#log"))
+    p.evaluate("window.__selectEditor('Kdenlive', '26.08')")
+    p.wait_for_timeout(50)
+    check("panel: editor label refreshes after Settings change without reopening",
+          "Kdenlive 26.08" in p.inner_text("#log") and "DaVinci Resolve 20.1" not in p.inner_text("#log"))
+    p.evaluate("window.__selectEditor('DaVinci Resolve', '20.1')")
     pb, _ = open_page("panel.html", cfg={"editor": "", "editorVersion": ""})
     check("panel: works with no editing app set (generic welcome)",
           "DaVinci Resolve" not in pb.inner_text("#log") and "Choose your editor" in pb.inner_text("#log"))
