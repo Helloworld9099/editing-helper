@@ -125,6 +125,12 @@
   });
 
   sendBtn.addEventListener('click', submit);
+  document.getElementById('analyze-screen').addEventListener('click', async () => {
+    try {
+      if ((await api.openScreenAnalysis()).ok) return;
+    } catch { /* the window could not be opened */ }
+    addMessage('error', null, 'Could not open Screen Analysis. Try again.');
+  });
   input.addEventListener('input', syncControls);
   examples.querySelectorAll('[data-prompt]').forEach((button) => {
     button.addEventListener('click', () => {
@@ -161,6 +167,9 @@
   }
   api.on('panel:side', (side) => {
     if (side === 'left' || side === 'right') document.body.dataset.panelSide = side;
+  });
+  api.on('panel:screen-analysis', ({ answer } = {}) => {
+    if (typeof answer === 'string' && answer.trim()) addMessage('coach', 'Coach · Screenshot analysis', answer);
   });
   api.on('panel:config-changed', () => { void showEditor(); });
   api.on('panel:shown', () => { input.focus(); void showEditor(); });

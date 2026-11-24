@@ -51,6 +51,18 @@ test('sends the configured access token as a bearer header', () =>
     assert.deepEqual(JSON.parse(s.state.body), { question: 'Hi' });
   }));
 
+test('screen analysis sends the image, editor and selected analysis fields', () =>
+  withServer((_req, res) => json(res, 200, { answer: 'Review' }), async (s) => {
+    const payload = { image: 'fixture', mime_type: 'image/png', editor: 'Kdenlive', version: '26.08',
+      mode: 'fix', content_type: 'gaming', context: 'Minecraft SMP', question: 'Why is the mask black?' };
+    let uploaded = 0;
+    const r = await core.postScreenAnalysis({ ...payload, baseUrl: s.url, onUpload: () => { uploaded++; } });
+    assert.deepEqual(r, { ok: true, answer: 'Review' });
+    assert.equal(uploaded, 1);
+    assert.equal(s.state.path, '/v1/screen-analysis');
+    assert.deepEqual(JSON.parse(s.state.body), payload);
+  }));
+
 test('rejects access tokens over plain HTTP to non-loopback hosts', async () => {
   const r = await core.postCoach({ baseUrl: 'http://coach.example.com', question: 'Hi', accessToken: 'token' });
   assert.equal(r.kind, 'config');

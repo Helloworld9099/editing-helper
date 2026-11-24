@@ -27,7 +27,16 @@ function openCapture() {
       baseUrl: process.env.EDITING_HELPER_API || cfg.apiBaseUrl,
       accessToken: process.env.EDITING_HELPER_API ? process.env.EDITING_HELPER_ACCESS_TOKEN : '',
       editor: cfg.editor, version: cfg.editorVersion, timeoutMs: cfg.timeoutSeconds * 1000,
-    }));
+    }), (reply) => {
+      if (!alive(panel)) createPanel();
+      const chat = panel.webContents;
+      if (chat.isLoadingMainFrame()) {
+        chat.once('did-finish-load', () => chat.send('panel:screen-analysis', reply));
+      } else {
+        chat.send('panel:screen-analysis', reply);
+      }
+      if (!panelVisible() && alive(mascot)) mascot.webContents.send('mascot:badge', true);
+    });
   }
   captureTool();
 }
@@ -265,6 +274,12 @@ function openSettings(mode = 'settings') {
 // -------------------------------------------------------------- IPC
 function registerIpc() {
   ipcMain.handle('config:get', (e) => (isOurs(e) ? publicConfig() : null));
+  ipcMain.handle('panel:open-screen-analysis', (e) => {
+    if (!isFrom(e, panel) || e.senderFrame !== e.sender.mainFrame)
+      return { ok: false };
+    openCapture();
+    return { ok: true };
+  });
 
   ipcMain.handle('config:save', (e, input) => {
     if (!isFrom(e, settingsWin)) return { ok: false, errors: { form: 'Not allowed.' } };
@@ -378,7 +393,7 @@ function registerIpc() {
     if (!isFrom(e, mascot)) return;
     Menu.buildFromTemplate([
       { label: 'Ask a question', click: openPanel },
-      { label: 'Review screenshot…', click: openCapture },
+      { label: 'Analyze Screen…', click: openCapture },
       { label: 'Settings…', click: () => openSettings('settings') },
       { label: 'Chat size', submenu: [
         { label: 'Compact (320 × 400)', click: () => setChatSize(320, 400) },

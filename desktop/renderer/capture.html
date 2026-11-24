@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src data:">
-  <title>Review screenshot</title>
+  <title>Screen Analysis</title>
   <link rel="stylesheet" href="shared.css">
   <link rel="stylesheet" href="capture.css">
 </head>
 <body>
 <main>
-  <h1>Review screenshot</h1>
+  <h1>Screen Analysis</h1>
   <section id="choose">
     <p>Choose what you want the coach to see.</p>
     <div class="row">
@@ -18,34 +18,68 @@
       <button id="browse" class="ghost">Open screenshot…</button>
       <input hidden type="file" id="file" accept="image/png,image/jpeg">
     </div>
-    <label id="picker" hidden>Capture source <select id="sources"></select>
+    <div id="picker" class="row" hidden>
+      <label>Capture source <select id="sources"></select></label>
       <button id="take" class="ghost">Capture</button>
-    </label>
-  </section>
-  <section id="review" hidden>
-    <img id="preview" alt="Screenshot selected for analysis">
-    <p id="dimensions"></p>
-    <details id="crop">
-      <summary>Crop to a region</summary>
-      <p>Set the top-left corner and size in image pixels.</p>
-      <div class="row">
-        <label>Left <input id="left" type="number" min="0"></label>
-        <label>Top <input id="top" type="number" min="0"></label>
-        <label>Width <input id="width" type="number" min="1"></label>
-        <label>Height <input id="height" type="number" min="1"></label>
-        <button class="ghost" id="apply">Apply crop</button>
-      </div>
-    </details>
-    <p id="privacy"></p>
-    <div class="row">
-      <button class="primary" id="send">Analyze Screenshot</button>
-      <button class="ghost" id="retake">Retake</button>
     </div>
   </section>
-  <p role="status" id="status"></p>
-  <div id="answer"></div>
-  <button class="ghost" id="cancel">Cancel</button>
+  <div id="review" hidden>
+    <section aria-label="Screenshot preview">
+      <img id="preview" alt="Screenshot selected for analysis">
+      <p id="dimensions" class="muted"></p>
+      <details id="crop">
+        <summary>Crop to a region</summary>
+        <p class="muted">Set the top-left corner and size in image pixels.</p>
+        <div class="row">
+          <label>Left <input id="left" type="number" min="0"></label>
+          <label>Top <input id="top" type="number" min="0"></label>
+          <label>Width <input id="width" type="number" min="1"></label>
+          <label>Height <input id="height" type="number" min="1"></label>
+          <button class="ghost" id="apply">Apply crop</button>
+        </div>
+      </details>
+    </section>
+    <section id="options" aria-label="Analysis options">
+      <p id="editor" class="muted"></p>
+      <label>Analysis mode
+        <select id="mode">
+          <option value="improve">Improve This Scene</option>
+          <option value="effect">How Do I Create This Effect?</option>
+          <option value="fix">Fix What I’m Doing</option>
+        </select>
+      </label>
+      <label>Content type
+        <select id="content-type">
+          <option value="auto">Auto-detect</option>
+          <option value="gaming">Minecraft / Gaming</option>
+          <option value="cinematic">Cinematic</option>
+          <option value="documentary">Documentary</option>
+          <option value="advertisement">Advertisement</option>
+          <option value="educational">Educational</option>
+          <option value="social">Social Media</option>
+          <option value="custom">Other / Custom</option>
+        </select>
+      </label>
+      <label>Creative context <span class="muted">(optional)</span>
+        <textarea id="context" rows="2" maxlength="1000" placeholder="A tense Minecraft SMP scene"></textarea>
+      </label>
+      <label>Question <span class="muted">(optional)</span>
+        <textarea id="question" rows="2" maxlength="1000" placeholder="How can I make the subject stand out?"></textarea>
+      </label>
+    </section>
+  </div>
 </main>
+<footer>
+  <div class="footer-inner">
+    <p id="privacy" class="muted" hidden></p>
+    <p role="status" id="status"></p>
+    <div class="row footer-actions">
+      <button class="primary" id="send" hidden disabled aria-describedby="privacy">Analyze Screenshot</button>
+      <button class="ghost" id="retake" hidden>Retake</button>
+      <button class="ghost" id="cancel">Cancel</button>
+    </div>
+  </div>
+</footer>
 <script src="capture.js"></script>
 </body>
 </html>

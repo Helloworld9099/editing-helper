@@ -4,27 +4,42 @@ const MAX_FILE = 24 * 1024 * 1024;
 const MAX_SEND = 5 * 1024 * 1024;
 let reviewed = '';
 let busy = false;
+let sending = false;
+let destinationReady = false;
 
-function status(message) { el('status').textContent = message; }
+function status(message, error = false) {
+  el('status').textContent = message;
+  el('status').classList.toggle('error', error);
+}
+
+function syncReview() {
+  const visible = Boolean(reviewed);
+  el('review').hidden = !visible;
+  el('retake').hidden = !visible;
+  el('send').hidden = !visible;
+  el('privacy').hidden = !visible;
+  el('send').disabled = busy || !destinationReady;
+}
 
 async function run(message, action) {
   if (busy) return;
   busy = true;
   status(message);
-  const controls = document.querySelectorAll('button:not(#cancel), select, input');
+  const controls = document.querySelectorAll('button:not(#cancel), select, input, textarea');
   for (const control of controls) control.disabled = true;
   try { await action(); }
-  catch (error) { status(error.message || 'Could not prepare this screenshot. Try another file.'); }
+  catch (error) { status(error.message || 'Could not prepare this screenshot. Try another file.', true); }
   finally {
     for (const control of controls) control.disabled = false;
     busy = false;
+    syncReview();
   }
 }
 
 function clearPreview() {
   reviewed = '';
   el('preview').removeAttribute('src');
-  el('review').hidden = true;
+  syncReview();
   el('choose').hidden = false;
   el('file').value = '';
   el('picker').hidden = true;
@@ -35,7 +50,7 @@ function clearPreview() {
 async function present(url) {
   const preview = el('preview');
   reviewed = '';
-  el('review').hidden = true;
+  syncReview();
   el('choose').hidden = false;
   preview.src = url;
   await preview.decode();
@@ -44,7 +59,7 @@ async function present(url) {
   el('dimensions').textContent = w + ' × ' + h + ' pixels';
   for (const [id, value] of Object.entries({ left: 0, top: 0, width: w, height: h })) el(id).value = value;
   el('choose').hidden = true;
-  el('review').hidden = false;
+  syncReview();
   el('crop').open = false;
   status('');
 }
@@ -135,20 +150,35 @@ el('apply').onclick = () => run('Applying crop…', async () => {
 });
 el('retake').onclick = () => { clearPreview(); status('Choose a new source.'); };
 el('cancel').onclick = () => window.close();
-window.addEventListener('keydown', e => { if (e.key === 'Escape') window.close(); });
-el('send').onclick = () => run('Sending screenshot for analysis…', async () => {
-  if (!reviewed || !el('privacy').textContent) throw new Error('Review a screenshot before sending.');
+window.addEventListener('keydown', e => { if (e.key === 'Escape' && !e.isComposing) window.close(); });
+window.capture.onUploaded(() => {
+  if (sending) status('Waiting for analysis…');
+});
+el('send').onclick = () => run('Uploading screenshot…', async () => {
+  if (!reviewed || !destinationReady) throw new Error('Review a screenshot before sending.');
   if (el('crop').open) throw new Error('Apply the crop or close the crop controls to send the current preview.');
   const [header, image] = reviewed.split(',');
-  const result = await window.capture.send(header.slice(5, -7), image);
-  if (result.error) throw new Error(result.error);
+  sending = true;
+  try {
+    const result = await window.capture.send(header.slice(5, -7), image, el('mode').value,
+      el('content-type').value, el('context').value, el('question').value);
+    if (!result?.ok) throw new Error(result?.error || 'Could not complete Screen Analysis. Try again.');
+  } finally { sending = false; }
   clearPreview();
   el('choose').hidden = true;
-  el('answer').textContent = result.answer;
-  el('cancel').textContent = 'Close';
-  status('Analysis complete.');
+  el('context').value = '';
+  el('question').value = '';
+  el('cancel').textContent = 'Done';
+  status('Analysis added to chat.');
 });
-window.capture.destination().then(({ destination }) => {
-  if (destination) el('privacy').textContent = 'Analyze Screenshot sends this preview to ' + destination +
-    ' and Google Gemini for scene improvement suggestions.';
-}).catch(() => status('Could not load the analysis destination. Close and reopen capture.'));
+window.capture.destination().then(({ destination, editor, version }) => {
+  if (!destination || !editor) throw new Error();
+  el('privacy').textContent = 'Analyze Screenshot sends this preview and your analysis options to ' +
+    destination + ' and Google Gemini.';
+  el('editor').textContent = version ? editor + ' ' + version : editor;
+  destinationReady = true;
+  syncReview();
+}).catch(() => {
+  el('privacy').textContent = 'Could not load Screen Analysis settings. Close and reopen the window.';
+  status(el('privacy').textContent, true);
+});

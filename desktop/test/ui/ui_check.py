@@ -2,7 +2,7 @@
 Setup (once):  pip install playwright && playwright install chromium
 Run:           python3 test/ui/ui_check.py
 Screenshots go to test/ui/out/. This does NOT test Electron windows (drag, always-on-top, focus)."""
-import json, os, pathlib, sys
+import base64, json, os, pathlib, sys
 from playwright.sync_api import sync_playwright
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
@@ -24,6 +24,7 @@ STUB = """
     getConfig: async () => cfg,
     saveConfig: async (c) => { calls.push(['save', c]); return window.__saveResult; },
     ask: (q) => { calls.push(['ask', q]); return new Promise(r => { pending = r; }); },
+    openScreenAnalysis: async () => { calls.push(['openScreenAnalysis']); return {ok:true}; },
     resizePanel: (...args) => calls.push(['resizePanel', ...args]),
     closePanel: () => calls.push(['closePanel']),
     openSettings: () => calls.push(['openSettings']),
@@ -31,6 +32,14 @@ STUB = """
     mascot: { dragStart: () => calls.push(['dragStart']), dragMove: () => calls.push(['dragMove']),
               dragEnd: (moved) => calls.push(['dragEnd', moved]), click: () => calls.push(['click']), menu: () => calls.push(['menu']) },
     on: (ch, cb) => { (listeners[ch] = listeners[ch] || []).push(cb); return () => {}; },
+  };
+  window.capture = {
+    destination: async () => ({destination:cfg.apiBaseUrl, editor:cfg.editor, version:cfg.editorVersion}),
+    onUploaded: (cb) => { window.__upload = cb; },
+    send: (...args) => {
+      calls.push(['analyze', ...args]);
+      return new Promise(r => { window.__resolveAnalysis = r; });
+    },
   };
 })();
 """
@@ -74,6 +83,17 @@ with sync_playwright() as pw:
     minimum, _ = open_page("panel.html", size=(300, 300))
     check("panel: minimum window keeps Send visible",
           minimum.evaluate("(() => {const s=document.querySelector('#send').getBoundingClientRect(); return document.documentElement.scrollWidth <= innerWidth && s.bottom <= innerHeight;})()"))
+    minimum.get_by_role("button", name="Analyze Screen").click()
+    check("panel: Analyze Screen is accessible at the minimum size", names(minimum) == ["openScreenAnalysis"])
+    minimum.fill("#input", "Draft question")
+    minimum.focus("#analyze-screen")
+    minimum.evaluate("""window.__emit('panel:screen-analysis', {answer:'**Review** <img src=x onerror="alert(1)">'})""")
+    check("panel: screenshot reply is labeled, sanitized, and keeps the draft and focus",
+          minimum.locator(".msg.coach strong").inner_text() == "Review"
+          and "Screenshot analysis" in minimum.locator(".msg.coach .who").text_content()
+          and minimum.locator(".msg.coach img").count() == 0
+          and minimum.input_value("#input") == "Draft question"
+          and minimum.evaluate("document.activeElement.id") == "analyze-screen")
     check("panel: welcome note mentions app and says not verified",
           "DaVinci Resolve 20.1" in p.inner_text("#log") and "aren't checked against sources" in p.inner_text("#log"))
     p.evaluate("window.__selectEditor('Kdenlive', '26.08')")
@@ -100,6 +120,9 @@ with sync_playwright() as pw:
           p.locator("#log img, #log script").count() == 0 and p.evaluate("window.__pwned") is None and "Press C." in p.inner_text("#log"))
     check("panel: coach reply uses Markdown layout",
           p.evaluate("getComputedStyle(document.querySelector('.msg.coach .body')).whiteSpace") == "normal")
+    check("panel: reply does not steal focus", p.evaluate("document.activeElement.id") != "input")
+    check("panel: draft typed during wait is preserved and Send re-enabled",
+          not p.is_disabled("#send") and p.input_value("#input") == "second question" and p.inner_text("#status") == "")
     p.fill("#input", "show formatting"); p.press("#input", "Enter")
     p.evaluate("window.__resolveAsk({ok:true, answer:'## Method 1\\n\\n**Bold instruction**\\n\\n1. First step\\n2. Second step\\n\\n`code`'})")
     p.wait_for_timeout(150)
@@ -111,11 +134,8 @@ with sync_playwright() as pw:
     check("panel: no visible Markdown syntax tokens",
           "**Bold instruction**" not in p.inner_text(".msg.coach:last-of-type"))
 
-    check("panel: reply does not steal focus", p.evaluate("document.activeElement.id") != "input")
-    check("panel: draft typed during wait is preserved and Send re-enabled",
-          not p.is_disabled("#send") and p.input_value("#input") == "second question" and p.inner_text("#status") == "")
     p.fill("#input", "line1"); p.press("#input", "Shift+Enter")
-    check("panel: Shift+Enter makes a newline, doesn't send", "\n" in p.input_value("#input") and names(p).count("ask") == 1)
+    check("panel: Shift+Enter makes a newline, doesn't send", "\n" in p.input_value("#input") and names(p).count("ask") == 2)
     p.fill("#input", "next"); p.press("#input", "Enter")
     p.evaluate("window.__resolveAsk({ok:false, kind:'offline', message:\"Can't reach the coach server at http://127.0.0.1:8000.\"})")
     p.wait_for_timeout(150)
@@ -152,6 +172,39 @@ with sync_playwright() as pw:
     check("panel: grip captures outward and inward movement", resize_calls == [
         ["resizePanel", "start"], ["resizePanel", "move", 40, 30],
         ["resizePanel", "move", -40, -25], ["resizePanel", "end"]], resize_calls)
+
+    # ---------------- screen analysis ----------------
+    p, errs = open_page("capture.html", size=(360, 400))
+    fixture = p.evaluate("document.createElement('canvas').toDataURL('image/png').split(',')[1]")
+    p.locator("#file").set_input_files({"name": "fixture.png", "mimeType": "image/png",
+                                       "buffer": base64.b64decode(fixture)})
+    p.get_by_role("button", name="Analyze Screenshot").wait_for()
+    check("analysis: review and privacy precede all uploads",
+          not names(p) and p.is_visible("#preview") and "Google Gemini" in p.inner_text("#privacy")
+          and "DaVinci Resolve 20.1" in p.inner_text("#editor"))
+    p.select_option("#mode", "effect")
+    p.select_option("#content-type", "gaming")
+    p.fill("#context", "Minecraft montage")
+    p.fill("#question", "How do I add an impact zoom?")
+    p.screenshot(path=str(OUT / "capture_compact.png"))
+    p.click("#send")
+    check("analysis: confirmation sends preview and selected options exactly once",
+          p.evaluate("window.__calls") == [["analyze", "image/png", p.get_attribute("#preview", "src").split(",")[1],
+                                           "effect", "gaming", "Minecraft montage", "How do I add an impact zoom?"]]
+          and p.is_disabled("#send") and "Uploading" in p.inner_text("#status"))
+    p.evaluate("window.__upload()")
+    check("analysis: shows the waiting state after upload", "Waiting" in p.inner_text("#status"))
+    p.evaluate("window.__resolveAnalysis({error:'Gemini rate limit reached.'})")
+    check("analysis: failure preserves preview and form for retry",
+          "rate limit" in p.inner_text("#status") and not p.is_disabled("#send")
+          and p.is_visible("#preview") and p.input_value("#context") == "Minecraft montage")
+    p.click("#send")
+    p.evaluate("window.__resolveAnalysis({ok:true})")
+    check("analysis: success clears the image and directs the user to chat",
+          names(p) == ["analyze", "analyze"] and not p.locator("#preview").get_attribute("src")
+          and "added to chat" in p.inner_text("#status") and not errs, errs)
+    p.press("#cancel", "Escape")
+    check("analysis: Escape closes the review window", p.evaluate("window.__closed"))
 
     # ---------------- mascot ----------------
     p, errs = open_page("mascot.html", size=(96, 96))

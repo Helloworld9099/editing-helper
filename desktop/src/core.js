@@ -214,7 +214,7 @@ function postCoach({ baseUrl, accessToken = '', question, editor, version, timeo
   return postJson({ baseUrl, accessToken, timeoutMs, endpoint: COACH_PATH, payload });
 }
 
-function postJson({ baseUrl, accessToken = '', timeoutMs, endpoint, payload, signal }) {
+function postJson({ baseUrl, accessToken = '', timeoutMs, endpoint, payload, signal, onUpload }) {
   return new Promise((resolve) => {
     const fail = (kind, message) => resolve({ ok: false, kind, message });
     const { url: base, error } = validateBaseUrl(baseUrl);
@@ -270,13 +270,15 @@ function postJson({ baseUrl, accessToken = '', timeoutMs, endpoint, payload, sig
         finish(broken);
       }
     });
+    if (onUpload) req.once('finish', onUpload);
     req.end(body);
   });
 }
 
-function postScreenAnalysis({ baseUrl, accessToken, timeoutMs, signal, image, mime_type, editor, version }) {
-  return postJson({ baseUrl, accessToken, timeoutMs, signal, endpoint: '/v1/screen-analysis',
-    payload: { image, mime_type, editor, version, mode: 'improve' } });
+function postScreenAnalysis({ baseUrl, accessToken, timeoutMs = 90000, signal, onUpload,
+  image, mime_type, editor, version, mode, content_type, context, question }) {
+  return postJson({ baseUrl, accessToken, timeoutMs, signal, onUpload, endpoint: '/v1/screen-analysis',
+    payload: { image, mime_type, editor, version, mode, content_type, context, question } });
 }
 
 module.exports = {

@@ -162,7 +162,9 @@ textarea::placeholder { color: #5d766e; opacity: 1; }
 textarea:focus { border-color: #4e978b; box-shadow: 0 0 0 2px rgba(31,124,111,.1); outline: none; }
 .composer button.primary { align-self: flex-end; flex: 0 0 auto; min-width: 72px; }
 .composer button.primary span { font-size: 14px; font-weight: 700; }
-.hint { margin: 7px 18px 0 1px; font-size: 10px; color: #556c65; line-height: 1.35; }
+.composer-tools { display: flex; align-items: center; gap: 8px; padding-right: 15px; margin-top: 7px; }
+#analyze-screen { flex: none; color: var(--accent); }
+.hint { margin: 0; font-size: 10px; color: #556c65; line-height: 1.35; }
 #resize {
   position: absolute; right: 1px; bottom: 1px; width: 23px; height: 23px;
   display: grid; place-items: center; padding: 0; border: 0; border-radius: 4px;
@@ -179,7 +181,7 @@ textarea:focus { border-color: #4e978b; box-shadow: 0 0 0 2px rgba(31,124,111,.1
   .examples { padding-top: 5px; padding-bottom: 5px; }
   footer { padding-top: 7px; padding-bottom: 6px; }
   textarea { min-height: 55px; }
-  .hint { margin-top: 5px; }
+  .composer-tools { margin-top: 5px; }
 }
 @media (max-width: 339px) {
   .brand-symbol { width: 30px; flex-basis: 30px; }
@@ -189,6 +191,6 @@ textarea:focus { border-color: #4e978b; box-shadow: 0 0 0 2px rgba(31,124,111,.1
 @media (prefers-reduced-motion: reduce) { .status.busy::before { animation: none; } }
 
 @media (max-height: 350px) {
-  #log.empty .msg.note .note-mark { display: none; }
-  #log.empty .msg.note h2 { margin: 0 0 5px; }
+  #log.empty .msg.note { margin-bottom: 0; padding-block: 4px; }
+  #log.empty .msg.note .note-mark, #log.empty .msg.note h2 { display: none; }
 }

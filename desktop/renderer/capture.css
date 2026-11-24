@@ -1,12 +1,32 @@
-main { max-width: 900px; margin: auto; padding: clamp(16px, 4vw, 32px); }
+body { display: flex; flex-direction: column; }
+main { flex: 1; overflow: auto; padding: clamp(16px, 4vw, 28px); }
+section { min-width: 0; padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
 h1 { font-size: 1.6rem; margin: 0 0 12px; }
-section { padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+#choose, #review, h1, .footer-inner { max-width: 900px; margin-inline: auto; }
+#choose > p { margin-top: 0; }
 .row { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; }
 #picker { margin-top: 12px; }
-#picker:not([hidden]) { display: block; }
-select { max-width: 100%; }
-#preview { display: block; width: auto; height: auto; max-width: 100%; max-height: 50vh; margin: auto; }
-input[type=number] { display: block; width: 6em; padding: 4px; }
+#picker label { min-width: 0; }
+#review:not([hidden]) { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 12px; align-items: start; }
+#preview { display: block; width: auto; height: auto; max-width: 100%; max-height: 45vh; margin: auto; }
+#dimensions { margin: 8px 0 12px; }
+#options { display: grid; gap: 12px; }
+#editor { margin: 0; }
+select, input, textarea {
+  display: block; max-width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: 7px;
+  background: var(--canvas); color: var(--text); font: inherit;
+}
+#options select, #options textarea { width: 100%; margin-top: 4px; }
+#options textarea { resize: vertical; }
+input[type=number] { width: 6em; }
 summary { cursor: pointer; }
-#privacy, #dimensions { color: var(--muted); }
-#answer { white-space: pre-wrap; overflow-wrap: anywhere; margin-bottom: 12px; }
+footer { border-top: 1px solid var(--border); background: var(--surface); padding: 10px clamp(16px, 4vw, 28px); }
+.footer-actions { align-items: center; }
+#cancel { margin-left: auto; }
+#privacy, #status { margin: 0 0 8px; overflow-wrap: anywhere; }
+#status:empty, [hidden] { display: none; }
+#status.error { color: var(--error); }
+button:disabled { cursor: not-allowed; }
+@media (max-width: 600px) {
+  #review:not([hidden]) { grid-template-columns: minmax(0, 1fr); }
+}

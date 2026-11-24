@@ -7,9 +7,11 @@ const core = require('./core');
 const page = path.join(__dirname, '../renderer/capture.html');
 const failure = 'Screen capture was canceled or unavailable. Check screen recording permissions or open a PNG or JPEG.';
 const limit = 5 * 1024 * 1024;
+const modes = new Set(['improve', 'effect', 'fix']);
+const contentTypes = new Set(['auto', 'gaming', 'cinematic', 'documentary', 'advertisement', 'educational', 'social', 'custom']);
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-function createCaptureTool(getConnection) {
+function createCaptureTool(getConnection, onAnswer) {
   let current;
   let nativeBusy = false;
 
@@ -32,7 +34,7 @@ function createCaptureTool(getConnection) {
     }
   }
 
-  function handle(channel, operation) {
+  function handle(channel, operation, fallback = failure) {
     ipcMain.handle('capture:' + channel, async (event, arg) => {
       const s = current;
       if (!s || event.sender !== s.win.webContents || event.senderFrame !== event.sender.mainFrame ||
@@ -40,7 +42,7 @@ function createCaptureTool(getConnection) {
       if (s.busy) return { error: 'A capture operation is already running.' };
       s.busy = true;
       try { return await operation(s, arg); }
-      catch { return { error: failure }; }
+      catch { return { error: fallback }; }
       finally { s.busy = false; }
     });
   }
@@ -81,23 +83,36 @@ function createCaptureTool(getConnection) {
     if (!input || !['image/png', 'image/jpeg'].includes(input.mime_type) ||
         typeof input.image !== 'string' || !input.image.length || input.image.length > 4 * Math.ceil(limit / 3))
       return { error: 'Invalid screenshot.' };
+    const { mode, content_type, context, question } = input;
+    if (!modes.has(mode) || !contentTypes.has(content_type) ||
+        [context, question].some(value => typeof value !== 'string' || value.length > core.MAX_QUESTION_CHARS))
+      return { error: 'Choose valid analysis options and keep each text field within 1000 characters.' };
     const connection = getConnection();
     if (connection.baseUrl !== s.destination) return { error: 'Server address changed. Close and reopen capture.' };
     const result = await core.postScreenAnalysis({ ...connection, signal: s.controller.signal,
-      image: input.image, mime_type: input.mime_type });
-    return result.ok ? { answer: result.answer } : { error: result.message };
-  });
-  handle('destination', s => ({ destination: s.destination }));
+      editor: s.editor, version: s.version, mode, content_type,
+      context: core.sanitizeText(context).trim(), question: core.sanitizeText(question).trim(),
+      image: input.image, mime_type: input.mime_type,
+      onUpload: () => { if (!s.win.isDestroyed()) s.win.webContents.send('capture:uploaded'); },
+    });
+    if (s.controller.signal.aborted) return { error: 'Analysis canceled.' };
+    if (!result.ok) return { error: result.message };
+    onAnswer({ answer: result.answer });
+    return { ok: true };
+  }, 'Could not complete Screen Analysis. Try again.');
+  handle('destination', s => ({ destination: s.destination, editor: s.editor, version: s.version }),
+    'Could not load Screen Analysis settings. Close and reopen the window.');
 
   return function open() {
     if (current) { current.win.show(); return; }
     const win = new BrowserWindow({ width: 760, height: 700, minWidth: 360, minHeight: 380,
-      title: 'Review screenshot', autoHideMenuBar: true, backgroundColor: '#f5f7f4',
+      title: 'Screen Analysis', autoHideMenuBar: true, backgroundColor: '#f5f7f4',
       webPreferences: { partition: 'screen-capture', sandbox: true, contextIsolation: true, nodeIntegration: false, spellcheck: false,
         preload: path.join(__dirname, 'capture-preload.js') } });
     win.webContents.session.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
     win.webContents.session.setPermissionCheckHandler(() => false);
-    const s = { win, ids: new Map(), controller: new AbortController(), destination: getConnection().baseUrl };
+    const { baseUrl: destination, editor, version } = getConnection();
+    const s = { win, ids: new Map(), controller: new AbortController(), destination, editor, version };
     current = s;
     win.on('closed', () => { s.controller.abort(); s.ids.clear(); current = null; });
     win.webContents.on('render-process-gone', () => { if (!win.isDestroyed()) win.destroy(); });
