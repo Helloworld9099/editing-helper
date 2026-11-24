@@ -150,7 +150,7 @@ def create_app(*, model=None, timeout=60.0, transport=None, provider=None, quota
             # Malformed tokens fail locally; valid-shaped tokens are throttled
             # before incurring a verification request to Supabase.
             candidate = credentials.credentials
-            if not re.fullmatch(r"[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+", candidate or ""):
+            if not re.fullmatch(r"[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+", candidate or ""):
                 raise HTTPException(401, "Sign in to continue.", headers={"WWW-Authenticate": "Bearer"})
             await public_access.throttle_identity_lookup(request)
             user_id = await public_access.authenticate(
