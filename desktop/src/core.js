@@ -173,6 +173,22 @@ function activeConnection(cfg, savedToken = '', env = process.env) {
   return { baseUrl, accessToken };
 }
 
+// Public builds use a publisher-configured, nonsecret HTTPS backend address.
+// Never load developer URL/token values from a packaged app's userData directory.
+function managedConnection(releaseConfig) {
+  const candidate = releaseConfig && releaseConfig.apiBaseUrl;
+  const { url, error } = validateBaseUrl(candidate);
+  if (error || !url || new URL(url).protocol !== 'https:') {
+    return { error: 'This release has no public service configured yet.' };
+  }
+  if (releaseConfig.authentication !== 'user-accounts') {
+    return { error: 'Public sign-in is not configured yet. This build cannot use the private developer server.' };
+  }
+  // No shared bearer secret is ever embedded into the distributable desktop app.
+  // The backend still must verify individual user sessions before public access works.
+  return { baseUrl: url, accessToken: '' };
+}
+
 // ------------------------------------------------------------ API client
 function sanitizeText(s) {
   return String(s).replace(/\r\n?/g, '\n').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u2028\u2029]/g, '');
@@ -309,5 +325,5 @@ function postCoach({ baseUrl, accessToken = '', question, editor, version, timeo
 module.exports = {
   DEFAULT_API_URL, COACH_PATH, MAX_QUESTION_CHARS, MAX_RESPONSE_BYTES, SUPPORTED_APPS, UPCOMING_APPS, DEFAULTS,
   panelResize, isLoopback, validateBaseUrl, urlWarning, loadConfig, saveConfig,
-  clampToArea, defaultMascotPosition, mascotPositionForBubble, panelPosition, sanitizeText, activeConnection, postCoach,
+  clampToArea, defaultMascotPosition, mascotPositionForBubble, panelPosition, sanitizeText, activeConnection, managedConnection, postCoach,
 };
