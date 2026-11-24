@@ -121,6 +121,7 @@
     if (result && result.ok) {
       addMessage('coach', 'Coach', result.answer, result.sources);
     } else {
+      if (result?.kind === 'auth') api.openSignIn?.();
       addMessage('error', null, (result && result.message) || 'Something went wrong. Try again.');
       if (!input.value.trim()) input.value = q;   // let the user retry without retyping
     }
@@ -182,6 +183,26 @@
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') api.closePanel(); });
   document.getElementById('collapse').addEventListener('click', () => api.closePanel());
   document.getElementById('settings').addEventListener('click', () => api.openSettings());
+  const authBtn = document.getElementById('auth');
+  async function updateAuth() {
+    if (!api.authStatus) return;
+    let state;
+    try { state = await api.authStatus(); } catch { return; }
+    authBtn.hidden = !state?.publicMode;
+    if (state?.publicMode) {
+      authBtn.textContent = state.signedIn ? 'Sign out' : 'Sign in';
+      authBtn.title = state.signedIn ? 'Sign out of your account' : 'Sign in with an email code';
+      authBtn.disabled = false;
+    }
+  }
+  authBtn.addEventListener('click', async () => {
+    const state = await api.authStatus();
+    if (!state?.signedIn) api.openSignIn();
+    else { await api.signOut(); await updateAuth(); }
+  });
+  api.on('panel:auth-changed', () => { void updateAuth(); });
+  void updateAuth();
+
 
   async function showEditor() {
     let cfg;
