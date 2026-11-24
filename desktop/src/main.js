@@ -261,7 +261,17 @@ function openSettings(mode = 'settings') {
 
 // -------------------------------------------------------------- IPC
 function registerIpc() {
-  ipcMain.handle('config:get', (e) => (isOurs(e) ? publicConfig() : null));
+  ipcMain.handle('config:get', async (e) => {
+    if (!isOurs(e)) return null;
+    // A user may have unlocked their Linux keyring since the app started.
+    if (isFrom(e, settingsWin)) {
+      secureTokenStorageAvailable = await credentials.canStoreToken(safeStorage);
+      if (secureTokenStorageAvailable && !savedAccessToken) {
+        savedAccessToken = await credentials.readToken(tokenFile, safeStorage);
+      }
+    }
+    return publicConfig();
+  });
 
   ipcMain.handle('config:save', async (e, input) => {
     if (!isFrom(e, settingsWin)) return { ok: false, errors: { form: 'Not allowed.' } };
