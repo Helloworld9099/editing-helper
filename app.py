@@ -214,6 +214,9 @@ def create_app(*, model=None, timeout=60.0, transport=None, provider=None, quota
                     model_question = question + prompt_context(notes)
                     if gemini:
                         payload = {"contents": [{"role": "user", "parts": [{"text": model_question}]}]}
+                        if auth_mode == "users":
+                            # Cap response generation for a billed public endpoint.
+                            payload["generationConfig"] = {"maxOutputTokens": 2048}
                         if rag_enabled:
                             payload["systemInstruction"] = {"parts": [{"text": SYSTEM_GUIDANCE}]}
                     else:
