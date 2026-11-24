@@ -92,7 +92,7 @@ For Groq, use the following provider settings.
 | `COACH_MODEL` | A [Groq chat model ID](https://console.groq.com/docs/api-reference#chat-create), for example `llama-3.3-70b-versatile` |
 | `GROQ_API_KEY` | Your Groq API key, injected as a server secret |
 
-Gemini, Groq, and the production container require `COACH_ACCESS_TOKEN` at startup. For a hosted deployment outside Docker, `COACH_REQUIRE_AUTH=1` also makes the token mandatory with either local provider. Setting `COACH_ACCESS_TOKEN` protects `/v1/coach` with every provider.
+In the default private `COACH_AUTH_MODE=shared`, Gemini, Groq, and the production container require `COACH_ACCESS_TOKEN` at startup. A separate `COACH_AUTH_MODE=users` service instead requires verified Supabase accounts and shared Redis quotas; the old shared token is not used in this mode. For a hosted deployment outside Docker, `COACH_REQUIRE_AUTH=1` also makes the token mandatory with either local provider. Setting `COACH_ACCESS_TOKEN` protects `/v1/coach` with every provider.
 
 [.env.example](.env.example) shows the runtime settings. When running outside Northflank, export the settings in the environment that starts Uvicorn.
 
@@ -102,7 +102,7 @@ Use a Northflank command health check to probe the loopback address. [Northflank
 python -c 'from urllib.request import urlopen; urlopen("http://127.0.0.1:8000/health", timeout=2).close()'
 ```
 
-To connect Electron, set `EDITING_HELPER_API` to the HTTPS service URL and `EDITING_HELPER_ACCESS_TOKEN` to the server's `COACH_ACCESS_TOKEN` in the environment that launches Electron. See [desktop setup](desktop/README.md#connect-to-a-hosted-backend).
+To connect Electron, set `EDITING_HELPER_API` to the HTTPS service URL and `EDITING_HELPER_ACCESS_TOKEN` to the server's `COACH_ACCESS_TOKEN` in the environment that launches Electron. See [developer setup](desktop/README.md#connection-modes). Public releases use per-user email-code sign-in rather than the shared developer token.
 
 ## Backend tests
 
@@ -116,4 +116,4 @@ Tests use simulated Ollama, llama.cpp, Groq, and Gemini responses and cover acce
 
 - Existing frontend clients still work. Optional `editor` and `version` fields let a new client include the user's selected editor without changing the response.
 - The default development runner above is Ollama. The offline release path uses [llama.cpp](https://github.com/ggml-org/llama.cpp) with the same API and a pinned GGUF, without an Ollama account. Review [Ollama's eligibility terms](https://ollama.com/terms) before using its services.
-- See [training/README.md](training/README.md) to start a free-GPU smoke run, export and compare weights, and launch the actual desktop frontend. This branch provides a launcher, not an installer; the desktop frontend and checkpoint are separate inputs.
+- See [training/README.md](training/README.md) to start a free-GPU smoke run, export and compare weights, and launch the actual desktop frontend. A manual GitHub Actions workflow now builds unsigned Linux, Windows, and macOS installer candidates after public service configuration. Code signing and real-device verification are still required.
