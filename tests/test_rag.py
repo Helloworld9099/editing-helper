@@ -108,7 +108,7 @@ class KnowledgeTests(unittest.TestCase):
             sample["review_status"] = "needs_review"
             p.write_text(json.dumps(sample) + "\n")
             self.assertEqual(read_notes(Path(folder)), [])
-            with self.assertRaisesRegex(ValueError, "No reviewed"):
+            with self.assertRaisesRegex(ValueError, "No indexed"):
                 build_index(Path(folder), Path(folder) / "none.sqlite3")
             sample["review_status"] = "source_checked"
             sample["source_url"] = "http://localhost/script"
