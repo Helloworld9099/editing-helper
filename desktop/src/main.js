@@ -4,7 +4,6 @@ const path = require('node:path');
 const core = require('./core');
 const credentials = require('./credentials');
 const releaseConfig = require('./release-config.json');
-const { makePublicAuth, releaseReady } = require('./public-auth');
 
 // Ubuntu defaults to Wayland, where apps cannot position their own windows or reliably stay
 // on top. Running through XWayland (X11) makes dragging and always-on-top work. Set
@@ -19,13 +18,10 @@ const HIDE_MS = 10 * 60 * 1000;
 const forceNormal = process.argv.includes('--normal-window');
 // Settings for your local development environment only. Never available in packaged releases.
 const publicMode = app.isPackaged || process.env.EDITING_HELPER_PUBLIC_PREVIEW === '1';
-const accountMode = publicMode && releaseConfig.authentication === 'user-accounts';
 const developerMode = !publicMode && process.env.EDITING_HELPER_DEV_SETTINGS === '1';
 const RENDERER = path.join(__dirname, '..', 'renderer');
 
-let cfgFile, tokenFile, userSessionFile;
-let publicAuth = null;
-let signinWin = null;
+let cfgFile, tokenFile;
 let cfg = { ...core.DEFAULTS };
 let savedAccessToken = '';
 let secureTokenStorageAvailable = false;
@@ -274,52 +270,8 @@ function openSettings(mode = 'settings') {
   });
 }
 
-// ----------------------------------------------------------- public sign-in
-function openSignin() {
-  if (!accountMode) return;
-  if (alive(signinWin)) { signinWin.show(); signinWin.focus(); return; }
-  signinWin = new BrowserWindow({
-    width: 440, height: 480, useContentSize: true,
-    title: 'Editing Coach: sign in', resizable: false, maximizable: false,
-    minimizable: false, fullscreenable: false, backgroundColor: '#f8faf7',
-    autoHideMenuBar: true, alwaysOnTop: false, webPreferences: prefs(),
-  });
-  signinWin.loadFile(path.join(RENDERER, 'signin.html'));
-  signinWin.on('closed', () => { signinWin = null; });
-}
-function notifyAccountChanged() {
-  if (alive(panel)) panel.webContents.send('panel:auth-changed');
-}
-
 // -------------------------------------------------------------- IPC
 function registerIpc() {
-  ipcMain.handle('auth:status', async (e) => {
-    if (!isOurs(e) && !isFrom(e, signinWin)) return null;
-    return accountMode ? { publicMode: true, ...publicAuth.status() } : { publicMode: false };
-  });
-  ipcMain.handle('auth:request-code', async (e, email) => {
-    if (!accountMode || !isFrom(e, signinWin)) return { ok: false, message: 'Not allowed.' };
-    try { await publicAuth.requestCode(email); return { ok: true }; }
-    catch (error) { return { ok: false, message: error.message }; }
-  });
-  ipcMain.handle('auth:verify-code', async (e, email, code) => {
-    if (!accountMode || !isFrom(e, signinWin)) return { ok: false, message: 'Not allowed.' };
-    try {
-      const status = await publicAuth.verifyCode(email, code);
-      notifyAccountChanged();
-      // Allow the IPC reply to reach the sign-in renderer before closing it.
-      setTimeout(() => { if (alive(signinWin)) signinWin.close(); }, 150);
-      return { ok: true, ...status };
-    } catch (error) { return { ok: false, message: error.message }; }
-  });
-  ipcMain.handle('auth:sign-out', async (e) => {
-    if (!accountMode || (!isOurs(e) && !isFrom(e, signinWin))) return { ok: false };
-    await publicAuth.signOut();
-    notifyAccountChanged();
-    return { ok: true };
-  });
-  ipcMain.on('auth:open', (e) => { if (isOurs(e)) openSignin(); });
-
   ipcMain.handle('config:get', async (e) => {
     if (!isOurs(e)) return null;
     // A user may have unlocked their Linux keyring since the app started.
@@ -397,9 +349,6 @@ function registerIpc() {
     for (const w of [mascot, panel]) if (alive(w)) w.setAlwaysOnTop(cfg.keepOnTop, 'floating');
     if (wasSetup && cfg.setupDone) {
       createMascot(); createPanel();
-      if (accountMode && releaseReady(releaseConfig) && !publicAuth.status().signedIn) {
-        setTimeout(openSignin, 250);
-      }
     }   // before setup window closes
     return { ok: true, restartNeeded };
   });
@@ -424,16 +373,9 @@ function registerIpc() {
     if (alive(mascot)) mascot.webContents.send('mascot:busy', true);
     let result;
     try {
-      let userToken = '';
-      if (accountMode && publicAuth.status().configured) {
-        userToken = await publicAuth.accessToken();
-      }
       const connection = publicMode
-        ? core.managedConnection(releaseConfig, userToken)
+        ? core.managedConnection(releaseConfig)
         : core.activeConnection(cfg, savedAccessToken);
-      if (publicMode && connection.error && /Sign in to Editing Helper/.test(connection.error)) {
-        openSignin();
-      }
       result = connection.error
         ? { ok: false, kind: 'config', message: connection.error }
         : await core.postCoach({
@@ -448,11 +390,6 @@ function registerIpc() {
     } finally {
       busy = false;
       if (alive(mascot)) mascot.webContents.send('mascot:busy', false);
-    }
-    if (accountMode && result.kind === 'http' && /HTTP 401/.test(result.message || '')) {
-      await publicAuth.signOut();
-      notifyAccountChanged();
-      openSignin();
     }
     if (result.ok && Array.isArray(result.sources)) {
       for (const reference of result.sources) {
@@ -519,15 +456,8 @@ function registerIpc() {
   });
   ipcMain.on('mascot:menu', (e) => {
     if (!isFrom(e, mascot)) return;
-    const accountMenu = accountMode ? [
-      { label: publicAuth.status().signedIn ? 'Sign out' : 'Sign in',
-        click: () => publicAuth.status().signedIn
-          ? void publicAuth.signOut().then(notifyAccountChanged)
-          : openSignin() },
-    ] : [];
     Menu.buildFromTemplate([
       { label: 'Ask a question', click: openPanel },
-      ...accountMenu,
       { label: 'Settings…', click: () => openSettings('settings') },
       { label: 'Chat size', submenu: [
         { label: 'Compact (320 × 400)', click: () => setChatSize(320, 400) },
@@ -563,14 +493,7 @@ if (!app.requestSingleInstanceLock()) {
     Menu.setApplicationMenu(null);
     cfgFile = path.join(app.getPath('userData'), 'config.json');
     tokenFile = path.join(app.getPath('userData'), 'access-token.enc');
-    userSessionFile = path.join(app.getPath('userData'), 'user-session.enc');
     cfg = core.loadConfig(cfgFile);
-    if (accountMode) {
-      publicAuth = makePublicAuth({
-        config: releaseConfig, storageFile: userSessionFile, safeStorage,
-      });
-      await publicAuth.initialize();
-    }
     // Legacy developer token storage is never read or sent by a public packaged build.
     if (!publicMode) {
       secureTokenStorageAvailable = await credentials.canStoreToken(safeStorage);
@@ -584,7 +507,6 @@ if (!app.requestSingleInstanceLock()) {
     screen.on('display-metrics-changed', reclampMascot);
     if (cfg.setupDone) {
       createMascot(); createPanel();
-      if (accountMode && releaseReady(releaseConfig) && !publicAuth.status().signedIn) openSignin();
     } else { openSettings('setup'); }
   });
 }
