@@ -27,7 +27,7 @@ Terminal A:
 
 Terminal B:
 
-    npm start
+    EDITING_HELPER_DEV_SETTINGS=1 npm start
 
 First launch: choose DaVinci Resolve and click Start, then right-click the pet ->
 Settings -> Server address `http://127.0.0.1:8001` -> Save. Open the panel and type:
@@ -53,7 +53,7 @@ Choose a different editor in Settings and verify that the app remembers the choi
 
 - Launch `npm start` normally: Settings must not show Server address, Access token, or Forget saved token. Editing/window preferences must still save.
 - Launch the **unpackaged developer app** with `EDITING_HELPER_DEV_SETTINGS=1 npm start`: developer-only controls are visible; the saved token is not returned by `config:get`, stored in `config.json`, or sent to a different overridden host.
-- In a **packaged judge demo**, the app never reads local developer tokens or environment overrides. The blank checked-in `release-config.json` fails closed until the workflow supplies the HTTPS `PUBLIC_API_URL`.
+- In a **packaged judge demo**, the app never reads local developer tokens or environment overrides. The blank checked-in `release-config.json` fails closed until the release script supplies the HTTPS `PUBLIC_API_URL`.
 - Replies without retrieved documentation display exactly `AI guidance`; documented replies retain their source links.
 - A guest deployment with `COACH_AUTH_MODE=demo` must use Redis and an explicitly configured finite daily global cap.
 
@@ -64,7 +64,7 @@ Choose a different editor in Settings and verify that the app remembers the choi
 - For local preview, run `PUBLIC_API_URL=https://YOUR-DEMO-HOST python3 .github/scripts/write_release_config.py` from repo root, then `EDITING_HELPER_PUBLIC_PREVIEW=1 npm start` inside `desktop/`.
 - Confirm the panel has **no Sign in button, email input, shared-token field, or server URL field** and does not load an account login window.
 - Restore the checked-in public placeholder using `git restore desktop/src/release-config.json` after local testing.
-- In GitHub Actions run **Build judge demo installers**. Installer candidates must contain only the public backend URL, not any private service secret.
+- Build installers locally or through the optional **Build judge demo installers** workflow, following [JUDGE_DEMO.md](JUDGE_DEMO.md). Installer candidates must contain only the public backend URL, not any private service secret.
 - Install and test each installer on a clean OS; verify the screen and pet behavior, error handling, and links before sharing.
 
 ### RAG reference check

@@ -1,9 +1,0 @@
-read -rsp "Access token: " EDITING_HELPER_ACCESS_TOKEN
-echo
-
-EDITING_HELPER_API="https://p01--editing-helper-api--fbvcc7mvswr6.code.run" \
-EDITING_HELPER_ACCESS_TOKEN="$EDITING_HELPER_ACCESS_TOKEN" \
-npm start
-
-
-rjHRTTdvy-xuNrjClUJr8OPmmkTaXbTsbqqp-tx-3jE

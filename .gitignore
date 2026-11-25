@@ -16,3 +16,11 @@ knowledge/index.sqlite3.tmp
 
 # Local Electron installer candidates and temporary release artifacts.
 desktop/dist/
+
+# Never commit installer archives or local credential scratch files.
+/booashddgo.txt
+*.deb
+*.exe
+*.AppImage
+*.dmg
+*.blockmap

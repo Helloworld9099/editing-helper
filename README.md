@@ -1,121 +1,127 @@
 # Editing Helper
 
-**Desktop app:** See [desktop/README.md](desktop/README.md) to launch the floating frontend and test it without a model.
+**An AI-powered desktop companion for video editors.**
 
-API for the Editing Helper desktop companion. It returns model-generated editing advice through Ollama, llama.cpp, Groq, or Google Gemini.
+Global AI Builders Challenge · v0.1.0 demo
 
-## Start on Ubuntu
+Editing Helper helps editors learn an effect, solve a workflow problem, or find a relevant resource without constantly switching between an editing program and tutorials. Its draggable floating mascot opens a small chat panel that stays accessible while you edit.
 
-Requires Python 3.11+ (and its venv module), Ollama running on this computer, and the local `qwen3.5:4b` model. If you already ran that model successfully, reuse it. Otherwise, after installing Ollama, run `ollama pull qwen3.5:4b` once.
+## Try the demo
+
+**No account, API key, Python installation, or server configuration is required.** The installers connect to our hosted demo backend automatically. An internet connection is required.
+
+Open the [GitHub Releases page](https://github.com/Helloworld9099/editing-helper/releases) and look for **v0.1.0 — Judge Demo** under Releases. Download the installer for your operating system from the release assets (not the source-code ZIP).
+
+| Platform | Installer | Requirements |
+| --- | --- | --- |
+| Windows | `Editing Helper Setup 0.1.0.exe` | 64-bit Windows |
+| Linux | `editing-coach_0.1.0_amd64.deb` | 64-bit Ubuntu or Debian-compatible distribution |
+
+See [SHA-256 checksums](docs/releases/v0.1.0/SHA256SUMS.txt) to verify the downloaded files. These are unsigned hackathon test builds. Windows may show an unknown-publisher or SmartScreen warning; do not bypass an actual malware detection. If an installer is blocked, contact the project team or use the source preview below.
+
+### Windows
+
+Run the downloaded setup executable, follow the installation wizard, and launch Editing Helper from the Start menu.
+
+### Linux
+
+Open a terminal in the directory containing the downloaded package:
+
+```bash
+sudo apt install ./editing-coach_0.1.0_amd64.deb
+```
+
+Launch **Editing Helper** from your application menu.
+
+### First launch
+
+1. Choose your video editor and optionally enter its version. Click **Start**.
+2. Click the floating mascot to open the chat.
+3. Type an editing question and send it. Follow the returned instructions in your own editor.
+4. Drag the mascot to reposition it. Right-click it to access settings and chat size, or to **Quit Editing Coach** completely.
+
+Closing the chat panel hides the chat; quitting the mascot closes the application. If floating windows do not behave correctly on your system, use **Normal window mode** in Settings and restart the app.
+
+## What to test as a judge
+
+Start with DaVinci Resolve, Kdenlive, or another editor you know. The app should give instructions appropriate to the selected editor and version.
+
+| Example question | What to evaluate |
+| --- | --- |
+| How do I create a smooth zoom? | Clear, actionable steps and relevant controls |
+| How can I create a camera shake and impact zoom? | Handling of a multi-step editing task |
+| How do I create a crossfade transition? | Editor-specific guidance; change editors in Settings and repeat |
+| How do I fix a clip with audio that is out of sync? | Useful troubleshooting suggestions |
+
+Repeat a question to assess consistency. Follow the steps in an actual editor to assess accuracy. When related source links are returned, inspect the distinction between source-reviewed notes and further-reading links. The app provides guidance; it does not automatically edit footage.
+
+## How it works
+
+```text
+Electron desktop companion
+        │  Question + editor + optional version
+        ▼
+FastAPI backend (Northflank)
+        │
+        ├─ Redis guest request quotas
+        ├─ SQLite FTS5 editor-specific knowledge retrieval
+        └─ Google Gemini → generated instructions
+        │
+        ▼
+Desktop chat: answer + relevant references when available
+```
+
+Gemini generates the answers. Retrieval supplies relevant, editor-specific context and reference links. The knowledge base contains **3,066 records across 11 editors**, as documented in the [coverage snapshot](knowledge/README.md): 55 source-reviewed summaries and 3,011 link-only references. A reference link does not prove that the model's instructions are correct, and the summaries have not all been physically tested in the editors.
+
+**Supported editors:** Adobe Premiere Pro, DaVinci Resolve, Kdenlive, Shotcut, CapCut, ACDSee Luxea, Lightworks, Clipchamp, OpenShot, Canva, and iMovie.
+
+## Privacy, reliability and limitations
+
+- The hosted version sends the question, selected editor, and optional version to the backend and Gemini. It does not capture the screen, upload footage, or control the editing program. Avoid entering sensitive information.
+- Provider keys and Redis credentials stay on the server. The public installer contains the demo HTTPS address, not a shared access token.
+- The public demo has finite per-IP and shared quotas. HTTP 429 means the demo limit has been reached; retry later. HTTP 503 may indicate that the provider or usage-protection service is unavailable.
+- AI answers can be incorrect or refer to features that vary by editor version or edition. Verify important steps in the editor.
+- Windows and Linux installers are provided for evaluation; signing and full cross-platform acceptance testing are separate release tasks. The demo depends on the hosted backend remaining available.
+
+## Run from source or inspect the implementation
+
+The quickest source preview uses the same demo API. Requires Node.js 22.12+ and Python 3.11+:
 
 ```bash
 git clone https://github.com/Helloworld9099/editing-helper.git
 cd editing-helper
+PUBLIC_API_URL=https://p01--demo-backend--fbvcc7mvswr6.code.run python3 .github/scripts/write_release_config.py
+cd desktop
+npm ci
+EDITING_HELPER_PUBLIC_PREVIEW=1 npm start
+```
+
+The preview command is for Linux/macOS shells. See [desktop development](desktop/README.md) for other development modes and [deployment instructions](desktop/JUDGE_DEMO.md) to run your own backend. The source preview changes a local, nonsecret release configuration file.
+
+| Repository area | Purpose |
+| --- | --- |
+| [desktop/](desktop/) | Electron UI, floating mascot, settings, HTTP client and packaging |
+| [app.py](app.py) | FastAPI request validation and model-provider integration |
+| [knowledge_rag.py](knowledge_rag.py) and [knowledge/](knowledge/) | Retrieval and attributed source records |
+| [demo_access.py](demo_access.py) and [quota_limits.py](quota_limits.py) | Guest access protection using Redis |
+| [tests/](tests/) and [desktop/test/](desktop/test/) | Backend and desktop automated tests |
+| [training/](training/) | Earlier optional local-model experiments; not required for the Gemini-powered judge demo |
+
+### Automated checks
+
+From the repository root, using a virtual environment:
+
+```bash
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
-.venv/bin/python -m uvicorn app:app --host 127.0.0.1 --port 8000
-```
-
-If Ubuntu reports that `venv` is unavailable, install your distro's `python3-venv` package and retry. Leave the server terminal open while using the app. Stop it with Ctrl+C. Start it again with the last command from the project directory. If your old demo is already on port 8000, stop that instance first.
-
-## Frontend contract
-
-- `GET /health` is public on allowed hosts and returns `{"status":"ok"}` when the API process is up.
-- The desktop supports AI questions for Adobe Premiere Pro, DaVinci Resolve, Kdenlive, Shotcut, CapCut, ACDSee Luxea, Lightworks, Clipchamp, OpenShot, Canva, and iMovie. This selects answer context; it does not verify or automate instructions inside those programs.
-- `POST /v1/coach` takes `{"question":"..."}` as JSON. A successful reply is `{"answer":"..."}`. The desktop renders trusted-formatting-only Markdown from the returned answer.
-- A missing or invalid hosted access token returns `401`. Invalid input returns `422`, a busy coach returns `429`, an unavailable provider or model returns `503`, a model timeout returns `504`, and other upstream failures return `502`. Errors contain a `detail` field.
-
-```bash
-curl -fsS http://127.0.0.1:8000/health
-curl -fsS http://127.0.0.1:8000/v1/coach \
-  -H 'Content-Type: application/json' \
-  -d '{"question":"Reply with hello."}'
-```
-
-## Judge Demo (no login)
-
-The downloadable judge build connects automatically to your publisher-configured HTTPS FastAPI server. Judges choose an editor and ask questions; there are **no email codes, user accounts, access-token fields, or server URL settings**.
-
-Deploy a **separate** Northflank service with `COACH_AUTH_MODE=demo`, a private `GEMINI_API_KEY`, private `COACH_REDIS_URL`, and an explicitly configured `COACH_DEMO_GLOBAL_PER_DAY` limit. Redis checks per-IP and global limits before every Gemini call. Build the judge installer with only the GitHub Actions variable `PUBLIC_API_URL`. No API secret is bundled.
-
-See **[desktop/JUDGE_DEMO.md](desktop/JUDGE_DEMO.md)** for the exact Northflank/Redis setup, testing commands, and installer steps. Guest access is publicly callable; monitor usage and stop the demo service after judging.
-
-## Private development versus judge installs
-
-The default private `COACH_AUTH_MODE=shared` still uses your existing `COACH_ACCESS_TOKEN`. To edit the saved Northflank address and token in your **unpackaged developer checkout**, launch `EDITING_HELPER_DEV_SETTINGS=1 npm start`. Ordinary settings and packaged judge builds never show those developer fields.
-
-## Editor knowledge base (RAG)
-
-When enabled, Editing Helper searches an **offline-built SQLite FTS5 index** containing **3,066 editor-specific records** across all 11 supported editors: 55 short, original source-reviewed summaries plus 3,011 navigation-only links to official manuals and public community sources. A supplemental source import added 1,689 links after removing 30 canonical URL duplicates. These are **not 3,066 verified tutorials**: link-only entries point to sources but do not establish any specific editing procedure. Records are organized by editor folder, topic category, software version and source type.
-
-The API preserves the original answer field and optionally returns a sources array with source-review level and topic. The desktop distinguishes "Source-reviewed notes" from "Further reading (links only)" with safe click-to-open HTTPS links. A source link means a relevant record was retrieved, **not** that all generated instructions have been physically verified.
-
-For local use, build the index and explicitly enable RAG before starting FastAPI:
-
-~~~bash
-python3 knowledge_rag.py validate
-python3 knowledge_rag.py stats
-python3 knowledge_rag.py build
-COACH_RAG_ENABLED=1 .venv/bin/python -m uvicorn app:app --host 127.0.0.1 --port 8000
-~~~
-
-Northflank builds and enables the index automatically through the root Dockerfile. No extra hosting/database accounts or embedding API are required. For adding documentation or permitted, reviewed forum summaries, see [knowledge/README.md](knowledge/README.md). The index is generated and should not be committed.
-
-## Model and scope
-
-Change `COACH_MODEL` in the server's environment and restart to try a different already-installed local model. Local development defaults to Ollama and accepts `localhost` and `127.0.0.1`. Keep local services bound to loopback and leave `COACH_ACCESS_TOKEN` unset for token-free use. The offline launcher uses llama.cpp.
-
-## Deploy on Northflank
-
-Build the root `Dockerfile` in your Northflank service and expose container port `8000` as public HTTP. Use the service's HTTPS URL in the desktop app. [Northflank port configuration](https://northflank.com/docs/v1/application/network/configure-ports)
-
-Set the shared runtime environment variables for either hosted provider.
-
-| Variable | Value |
-| --- | --- |
-| `COACH_ACCESS_TOKEN` | A separate shared secret for desktop clients. Generate one with `python -c 'import secrets; print(secrets.token_urlsafe(32))'`. |
-| `COACH_ALLOWED_HOSTS` | Comma-separated hostnames without schemes or ports, including your Northflank hostname, any custom domain, and `127.0.0.1` for the probe below |
-
-For Google Gemini, use the following provider settings.
-
-| Variable | Value |
-| --- | --- |
-| `COACH_PROVIDER` | `gemini` |
-| `COACH_MODEL` | Optional Gemini model ID. Leave unset to use `gemini-2.5-flash`. |
-| `GEMINI_API_KEY` | Your Google Gemini API key, injected as a server secret |
-
-The backend calls Google's [native Gemini API](https://ai.google.dev/api/generate-content). Google lists `gemini-2.5-flash` as deprecated with API access limited to existing users until December 1, 2026. If your project lacks access, set `COACH_MODEL` to a supported text-generation model available to your project. [Gemini 2.5 Flash availability](https://ai.google.dev/gemini-api/docs/models/gemini-2.5-flash)
-
-For Groq, use the following provider settings.
-
-| Variable | Value |
-| --- | --- |
-| `COACH_PROVIDER` | `groq` |
-| `COACH_MODEL` | A [Groq chat model ID](https://console.groq.com/docs/api-reference#chat-create), for example `llama-3.3-70b-versatile` |
-| `GROQ_API_KEY` | Your Groq API key, injected as a server secret |
-
-In the default private `COACH_AUTH_MODE=shared`, Gemini, Groq, and the production container require `COACH_ACCESS_TOKEN` at startup. A separate judge-demo service instead uses `COACH_AUTH_MODE=demo` with required Redis usage limits and **no shared token**. For a hosted deployment outside Docker, `COACH_REQUIRE_AUTH=1` makes the token mandatory in private shared mode.
-
-[.env.example](.env.example) shows the runtime settings. When running outside Northflank, export the settings in the environment that starts Uvicorn.
-
-Use a Northflank command health check to probe the loopback address. [Northflank health-check configuration](https://northflank.com/docs/v1/application/observe/configure-health-checks)
-
-```bash
-python -c 'from urllib.request import urlopen; urlopen("http://127.0.0.1:8000/health", timeout=2).close()'
-```
-
-To connect Electron, set `EDITING_HELPER_API` to the HTTPS service URL and `EDITING_HELPER_ACCESS_TOKEN` to the server's `COACH_ACCESS_TOKEN` in the environment that launches Electron. See [developer setup](desktop/README.md#connection-modes). Judge builds connect to the publisher's fixed HTTPS demo endpoint without user login or a shared client token.
-
-## Backend tests
-
-```bash
+.venv/bin/python knowledge_rag.py validate
+.venv/bin/python knowledge_rag.py build
 .venv/bin/python -m unittest discover -s tests -v
+cd desktop
+npm ci
+npm test
 ```
 
-Tests use simulated Ollama, llama.cpp, Groq, and Gemini responses and cover access tokens, allowed hosts, public health checks, upstream errors, knowledge retrieval, and Gemini context injection.
+These checks cover implementation behavior, mocked provider requests and retrieval; they do not establish real-world editing accuracy. See the [testing guide](desktop/TESTING.md) for additional renderer and manual desktop checks.
 
-## Local desktop build and training
-
-- Existing frontend clients still work. Optional `editor` and `version` fields let a new client include the user's selected editor without changing the response.
-- The default development runner above is Ollama. The offline release path uses [llama.cpp](https://github.com/ggml-org/llama.cpp) with the same API and a pinned GGUF, without an Ollama account. Review [Ollama's eligibility terms](https://ollama.com/terms) before using its services.
-- See [training/README.md](training/README.md) to start a free-GPU smoke run, export and compare weights, and launch the actual desktop frontend. A manual GitHub Actions workflow now builds unsigned Linux, Windows, and macOS installer candidates after public service configuration. Code signing and real-device verification are still required.
+**Maintainer resources:** [Full development guide](docs/DEVELOPMENT.md) · [Hosted demo setup and installer builds](desktop/JUDGE_DEMO.md) · [Knowledge source policy](knowledge/README.md)

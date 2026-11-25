@@ -54,7 +54,7 @@ mode uses regular framed windows. Windows and macOS are not verified.
 ## Connect to the real backend
 
 With developer Settings enabled, set **Server address** back to `http://127.0.0.1:8000`. See the
-[root README](../README.md) to start the local API and a runner. The desktop
+[development guide](../docs/DEVELOPMENT.md) to start the local API and a runner. The desktop
 makes requests in Electron's main process, so no CORS change is needed.
 AI responses are rendered as sanitized Markdown in the chat bubble. Headings, lists, bold text, and code blocks display normally; potentially unsafe HTML and images are discarded. User messages and error messages are kept as literal text.
 
@@ -77,7 +77,7 @@ python launch.py --runner /path/to/llama-server --model /path/to/model.gguf -- \
 
 A packaged judge-demo installer opens with no email sign-in, no account settings, and no server or token fields. Judges select an editor and ask questions. The app connects automatically to the publisher's HTTPS Northflank demo server and sends **no shared credentials**.
 
-Set the GitHub Actions variable `PUBLIC_API_URL` to the demo backend's HTTPS origin, then run **Build judge demo installers**. The demo FastAPI backend requires a private Redis quota store and explicit daily budget before calling Gemini. See [JUDGE_DEMO.md](JUDGE_DEMO.md) for the exact setup.
+Download the judge installers from [GitHub Releases](https://github.com/Helloworld9099/editing-helper/releases), or build locally using `PUBLIC_API_URL` as documented in [JUDGE_DEMO.md](JUDGE_DEMO.md). The optional GitHub Actions workflow also accepts that variable. The demo FastAPI backend requires a private Redis quota store and explicit daily budget before calling Gemini. See [JUDGE_DEMO.md](JUDGE_DEMO.md) for the exact setup.
 
 ## Developer connection settings (not in installers)
 
@@ -93,4 +93,4 @@ Developer controls are unavailable in packaged judge builds. The checked-in rele
 
 Run `npm test` for the client tests. See [TESTING.md](TESTING.md)
 for renderer tests and the manual desktop checklist. Desktop rendering and
-mock replies do not establish model accuracy. Related source references appear when the backend retrieves reviewed knowledge notes; they do not guarantee that every generated step is correct. A fully verified tutorial library, screen capture, installers, and packaged weights are not implemented by this integration. For adding documentation notes, see [knowledge/README.md](../knowledge/README.md).
+mock replies do not establish model accuracy. Related source references appear when the backend retrieves reviewed knowledge notes; they do not guarantee that every generated step is correct. The demo includes installer packaging, but does not include screen capture, packaged model weights, or a fully verified tutorial library. For adding documentation notes, see [knowledge/README.md](../knowledge/README.md).

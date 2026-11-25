@@ -58,19 +58,43 @@ curl -i https://YOUR-DEMO-SERVICE/v1/coach \
 
 Expected: HTTP 200 and an `answer`. No Authorization header is required. Repeat calls beyond a **temporarily lowered** IP/minute cap to confirm HTTP 429, then restore appropriate limits before judging. Disconnect Redis briefly only in a controlled test: requests must fail with 503 without spending Gemini tokens. Do not run the service without quotas.
 
-## 4. Configure the downloadable desktop build
+## 4. Build and distribute the desktop application
 
-In GitHub → `Helloworld9099/editing-helper` → **Settings → Secrets and variables → Actions → Variables** create:
+Judges should install the prebuilt Windows or Linux package from [GitHub Releases](https://github.com/Helloworld9099/editing-helper/releases). They do not need to follow the maintainer steps below.
 
-```text
-PUBLIC_API_URL = https://YOUR-DEMO-SERVICE
+### Build locally (no GitHub Actions required)
+
+From the repository root, on Ubuntu with Node.js 22.12+:
+
+```bash
+export PUBLIC_API_URL=https://p01--demo-backend--fbvcc7mvswr6.code.run
+python3 .github/scripts/write_release_config.py
+cd desktop
+npm ci
+npm test
+npx --yes electron-builder@26.18.0 --linux deb --x64 --publish never
 ```
 
-This is an ordinary public HTTPS URL, **not a secret**. Only the publisher's public HTTPS URL belongs in installer variables; Redis and Gemini credentials stay exclusively on Northflank.
+To build the Windows NSIS installer from the same Ubuntu checkout, with Docker installed, run from `desktop/` after generating the release config:
 
-Open **Actions → Build judge demo installers → Run workflow**, on the **main** branch.
+```bash
+sudo docker run --rm \
+  -v "$PWD:/project" \
+  -v editing-helper-node-modules:/project/node_modules \
+  -w /project \
+  electronuserland/builder:wine \
+  /bin/bash -c "npm ci && npx --yes electron-builder@26.18.0 --win nsis --x64 --publish never"
+```
 
-The workflow builds unsigned candidates for Linux (`.AppImage`, `.deb`), Windows (`.exe`), and macOS (`.dmg`). Download the artifacts only after successful checks. These are **not** automatically signed, notarized, published, or installed; test on clean systems before sharing. Windows SmartScreen and macOS Gatekeeper may warn about unsigned builds; plan signing/notarization for broader distribution.
+On a Windows development machine, generate the same release configuration, install npm dependencies, then run `npx --yes electron-builder@26.18.0 --win nsis --x64 --publish never` in `desktop/`.
+
+Installers appear in `desktop/dist/`. Publish the `.deb` and `.exe` as GitHub Release assets, not regular Git commits. A blockmap is unnecessary for a manual installer download. Include SHA-256 hashes and test on clean systems before sharing.
+
+### Optional GitHub Actions build
+
+Run **Build judge demo installers** on `main`. The workflow defaults to the public demo hostname above; the repository variable `PUBLIC_API_URL` can override it. The workflow produces unsigned Linux, Windows and macOS candidates. It is optional and consumes the account's Actions allowance.
+
+Never bundle the provider key, Redis URL, or private access token. The public HTTPS origin is the only deployment setting needed in the installer.
 
 ## 5. Test a no-login desktop preview locally on Ubuntu
 
@@ -102,7 +126,7 @@ Don't commit a locally generated config unnecessarily.
 - Run `cd desktop && npm ci && npm test`.
 - Test a real guest question through FastAPI with no Authorization header.
 - Confirm HTTP 429 when quotas are reached, and 503 when Redis is unavailable.
-- Open the installer on a clean Ubuntu/Windows/macOS computer and check **no login, no URL, no token** is requested.
+- Open the installer on a clean Ubuntu/Windows computer (and macOS if distributing a macOS build) and check **no login, no URL, no token** is requested.
 - Inspect packaged files to ensure no `GEMINI_API_KEY`, `COACH_ACCESS_TOKEN` or `COACH_REDIS_URL` appears.
 - Verify the editor knowledge links load and answers still show only `AI guidance` when unsourced.
 - Provide a short judge README (startup, supported editors, example prompt, limitations), and arrange a trusted way to share the installer.
