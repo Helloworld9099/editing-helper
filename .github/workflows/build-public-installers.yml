@@ -20,7 +20,7 @@ jobs:
             target: mac
     runs-on: ${{ matrix.os }}
     env:
-      PUBLIC_API_URL: ${{ vars.PUBLIC_API_URL }}
+      PUBLIC_API_URL: ${{ vars.PUBLIC_API_URL || 'https://p01--editing-helper-api--fbvcc7mvswr6.code.run' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
