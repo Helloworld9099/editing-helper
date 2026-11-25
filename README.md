@@ -32,6 +32,12 @@ curl -fsS http://127.0.0.1:8000/v1/coach \
   -d '{"question":"Reply with hello."}'
 ```
 
+## Judge Demo (no login)
+
+For a limited judge evaluation, use a **separate Northflank service** with `COACH_AUTH_MODE=demo`, private `GEMINI_API_KEY`, private `COACH_REDIS_URL`, and an explicit `COACH_DEMO_GLOBAL_PER_DAY` cap. FastAPI applies Redis IP/global quotas before calling Gemini; no access token is bundled in the desktop. Build with **PUBLIC_RELEASE_MODE=demo** and **PUBLIC_API_URL** (public HTTPS origin). Judges simply install the app, select an editor, and ask questions. No Supabase or SMTP is required.
+
+See **[desktop/JUDGE_DEMO.md](desktop/JUDGE_DEMO.md)** for the exact Northflank configuration and installer steps. This is an intentionally capped, anonymous demo endpoint; monitor Gemini usage and stop the demo service when judging ends.
+
 ## Private development and public release
 
 Your existing Northflank backend still works in `COACH_AUTH_MODE=shared` with `COACH_ACCESS_TOKEN`. Do **not** distribute that token. Normal desktop Settings hides both connection fields; for local developer configuration, run `EDITING_HELPER_DEV_SETTINGS=1 npm start`.
