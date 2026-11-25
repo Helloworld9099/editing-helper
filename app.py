@@ -7,6 +7,7 @@ import sqlite3
 
 from knowledge_rag import SYSTEM_GUIDANCE, index_path, prompt_context, search_notes
 from public_access import PublicAccess
+from demo_access import DemoAccess
 from contextlib import asynccontextmanager
 from secrets import compare_digest
 
@@ -78,24 +79,30 @@ def create_app(*, model=None, timeout=60.0, transport=None, provider=None, quota
     gemini = provider == "gemini"
     hosted = groq or gemini
     auth_mode = os.environ.get("COACH_AUTH_MODE", "shared").strip()
-    if auth_mode not in {"shared", "users"}:
-        raise ValueError("COACH_AUTH_MODE must be shared or users.")
+    if auth_mode not in {"shared", "users", "demo"}:
+        raise ValueError("COACH_AUTH_MODE must be shared, users, or demo.")
     public_access = None
+    demo_access = None
     managed_redis = None
-    if auth_mode == "users":
+    if auth_mode in {"users", "demo"}:
+        if auth_mode == "demo" and not hosted:
+            raise ValueError("COACH_AUTH_MODE=demo is only supported with a hosted model provider.")
         if quota_store is None:
             redis_url = os.environ.get("COACH_REDIS_URL", "").strip()
             if not redis_url.startswith(("redis://", "rediss://")):
-                raise ValueError("COACH_REDIS_URL is required for public user quotas.")
+                raise ValueError("COACH_REDIS_URL is required for public user/demo quotas.")
             from redis.asyncio import from_url
             managed_redis = from_url(redis_url, decode_responses=True, socket_connect_timeout=3,
                                      socket_timeout=3, health_check_interval=30)
             quota_store = managed_redis
-        public_access = PublicAccess(
-            supabase_url=os.environ.get("AUTH_SUPABASE_URL", "").strip(),
-            publishable_key=os.environ.get("AUTH_SUPABASE_PUBLISHABLE_KEY", "").strip(),
-            redis_store=quota_store,
-        )
+        if auth_mode == "users":
+            public_access = PublicAccess(
+                supabase_url=os.environ.get("AUTH_SUPABASE_URL", "").strip(),
+                publishable_key=os.environ.get("AUTH_SUPABASE_PUBLISHABLE_KEY", "").strip(),
+                redis_store=quota_store,
+            )
+        else:
+            demo_access = DemoAccess(quota_store)
     rag_setting = os.environ.get("COACH_RAG_ENABLED", "0").strip()
     if rag_setting not in {"0", "1"}:
         raise ValueError("COACH_RAG_ENABLED must be 0 or 1.")
@@ -132,6 +139,8 @@ def create_app(*, model=None, timeout=60.0, transport=None, provider=None, quota
     access_token = os.environ.get("COACH_ACCESS_TOKEN", "").strip()
     if auth_mode == "shared" and not access_token and (hosted or os.environ.get("COACH_REQUIRE_AUTH") == "1"):
         raise ValueError("COACH_ACCESS_TOKEN is required for hosted deployments.")
+    if auth_mode == "demo" and access_token:
+        raise ValueError("COACH_ACCESS_TOKEN must be unset for guest demo mode.")
     if access_token and not re.fullmatch(r"[A-Za-z0-9._~+/=-]+", access_token):
         raise ValueError("COACH_ACCESS_TOKEN must be a valid bearer token.")
 
@@ -144,6 +153,11 @@ def create_app(*, model=None, timeout=60.0, transport=None, provider=None, quota
     bearer = HTTPBearer(auto_error=False)
 
     async def require_access_token(request: Request, credentials=Depends(bearer)):
+        if auth_mode == "demo":
+            # No login, but the atomic Redis cap is mandatory before Gemini.
+            # Deliberately ignore any client-supplied credential in guest mode.
+            await demo_access.charge(request)
+            return
         if auth_mode == "users":
             if credentials is None:
                 raise HTTPException(401, "Sign in to continue.", headers={"WWW-Authenticate": "Bearer"})
@@ -189,7 +203,7 @@ def create_app(*, model=None, timeout=60.0, transport=None, provider=None, quota
         return {"status": "ok"}
 
     @api.post("/v1/coach", response_model=CoachReply, response_model_exclude_none=True,
-              dependencies=[Depends(require_access_token)] if access_token or auth_mode == "users" else [])
+              dependencies=[Depends(require_access_token)] if access_token or auth_mode in {"users", "demo"} else [])
     async def coach(body: CoachRequest, request: Request):
         slot = request.app.state.slot
         if slot.locked():
@@ -214,8 +228,8 @@ def create_app(*, model=None, timeout=60.0, transport=None, provider=None, quota
                     model_question = question + prompt_context(notes)
                     if gemini:
                         payload = {"contents": [{"role": "user", "parts": [{"text": model_question}]}]}
-                        if auth_mode == "users":
-                            # Cap response generation for a billed public endpoint.
+                        if auth_mode in {"users", "demo"}:
+                            # Cap response generation for billed public endpoints.
                             payload["generationConfig"] = {"maxOutputTokens": 2048}
                         if rag_enabled:
                             payload["systemInstruction"] = {"parts": [{"text": SYSTEM_GUIDANCE}]}
