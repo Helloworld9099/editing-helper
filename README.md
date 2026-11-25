@@ -34,19 +34,15 @@ curl -fsS http://127.0.0.1:8000/v1/coach \
 
 ## Judge Demo (no login)
 
-For a limited judge evaluation, use a **separate Northflank service** with `COACH_AUTH_MODE=demo`, private `GEMINI_API_KEY`, private `COACH_REDIS_URL`, and an explicit `COACH_DEMO_GLOBAL_PER_DAY` cap. FastAPI applies Redis IP/global quotas before calling Gemini; no access token is bundled in the desktop. Build with **PUBLIC_RELEASE_MODE=demo** and **PUBLIC_API_URL** (public HTTPS origin). Judges simply install the app, select an editor, and ask questions. No Supabase or SMTP is required.
+The downloadable judge build connects automatically to your publisher-configured HTTPS FastAPI server. Judges choose an editor and ask questions; there are **no email codes, user accounts, access-token fields, or server URL settings**.
 
-See **[desktop/JUDGE_DEMO.md](desktop/JUDGE_DEMO.md)** for the exact Northflank configuration and installer steps. This is an intentionally capped, anonymous demo endpoint; monitor Gemini usage and stop the demo service when judging ends.
+Deploy a **separate** Northflank service with `COACH_AUTH_MODE=demo`, a private `GEMINI_API_KEY`, private `COACH_REDIS_URL`, and an explicitly configured `COACH_DEMO_GLOBAL_PER_DAY` limit. Redis checks per-IP and global limits before every Gemini call. Build the judge installer with only the GitHub Actions variable `PUBLIC_API_URL`. No API secret is bundled.
 
-## Private development and public release
+See **[desktop/JUDGE_DEMO.md](desktop/JUDGE_DEMO.md)** for the exact Northflank/Redis setup, testing commands, and installer steps. Guest access is publicly callable; monitor usage and stop the demo service after judging.
 
-Your existing Northflank backend still works in `COACH_AUTH_MODE=shared` with `COACH_ACCESS_TOKEN`. Do **not** distribute that token. Normal desktop Settings hides both connection fields; for local developer configuration, run `EDITING_HELPER_DEV_SETTINGS=1 npm start`.
+## Private development versus judge installs
 
-A separate public deployment now supports `COACH_AUTH_MODE=users`. In that mode, FastAPI verifies each signed-in user against Supabase Auth's `/auth/v1/user` endpoint and applies atomic Redis quotas **before** making any Gemini request. An Electron public release uses passwordless email OTP and stores only an encrypted per-user refresh token (or a temporary session if no secure keyring exists). No shared token is shipped.
-
-**External setup is still required:** create a Supabase Auth project with custom SMTP and a numeric OTP email template, provision Redis, deploy a separate Northflank public service with its environment variables, configure GitHub Actions public release variables, then build and test the installers. The checked-in release config is intentionally blank and fails closed until configured. Windows/macOS unsigned installers require signing/notarization before a general release.
-
-See [desktop/PUBLIC_RELEASE.md](desktop/PUBLIC_RELEASE.md) for step-by-step configuration and validation. The build-candidate workflow is `.github/workflows/build-public-installers.yml`.
+The default private `COACH_AUTH_MODE=shared` still uses your existing `COACH_ACCESS_TOKEN`. To edit the saved Northflank address and token in your **unpackaged developer checkout**, launch `EDITING_HELPER_DEV_SETTINGS=1 npm start`. Ordinary settings and packaged judge builds never show those developer fields.
 
 ## Editor knowledge base (RAG)
 
@@ -98,7 +94,7 @@ For Groq, use the following provider settings.
 | `COACH_MODEL` | A [Groq chat model ID](https://console.groq.com/docs/api-reference#chat-create), for example `llama-3.3-70b-versatile` |
 | `GROQ_API_KEY` | Your Groq API key, injected as a server secret |
 
-In the default private `COACH_AUTH_MODE=shared`, Gemini, Groq, and the production container require `COACH_ACCESS_TOKEN` at startup. A separate `COACH_AUTH_MODE=users` service instead requires verified Supabase accounts and shared Redis quotas; the old shared token is not used in this mode. For a hosted deployment outside Docker, `COACH_REQUIRE_AUTH=1` also makes the token mandatory with either local provider. Setting `COACH_ACCESS_TOKEN` protects `/v1/coach` with every provider.
+In the default private `COACH_AUTH_MODE=shared`, Gemini, Groq, and the production container require `COACH_ACCESS_TOKEN` at startup. A separate judge-demo service instead uses `COACH_AUTH_MODE=demo` with required Redis usage limits and **no shared token**. For a hosted deployment outside Docker, `COACH_REQUIRE_AUTH=1` makes the token mandatory in private shared mode.
 
 [.env.example](.env.example) shows the runtime settings. When running outside Northflank, export the settings in the environment that starts Uvicorn.
 
@@ -108,7 +104,7 @@ Use a Northflank command health check to probe the loopback address. [Northflank
 python -c 'from urllib.request import urlopen; urlopen("http://127.0.0.1:8000/health", timeout=2).close()'
 ```
 
-To connect Electron, set `EDITING_HELPER_API` to the HTTPS service URL and `EDITING_HELPER_ACCESS_TOKEN` to the server's `COACH_ACCESS_TOKEN` in the environment that launches Electron. See [developer setup](desktop/README.md#connection-modes). Public releases use per-user email-code sign-in rather than the shared developer token.
+To connect Electron, set `EDITING_HELPER_API` to the HTTPS service URL and `EDITING_HELPER_ACCESS_TOKEN` to the server's `COACH_ACCESS_TOKEN` in the environment that launches Electron. See [developer setup](desktop/README.md#connection-modes). Judge builds connect to the publisher's fixed HTTPS demo endpoint without user login or a shared client token.
 
 ## Backend tests
 

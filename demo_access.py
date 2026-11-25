@@ -10,7 +10,7 @@ import os
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, Request
-from public_access import QUOTA_SCRIPT, positive_limit
+from quota_limits import QUOTA_SCRIPT, positive_limit
 
 
 class DemoAccess:

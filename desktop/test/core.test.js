@@ -205,19 +205,6 @@ test('credentials: normal launch uses persisted URL and token; env can override 
   });
 });
 
-test('public release uses publisher URL, never a shared developer credential', () => {
-  const base = { apiBaseUrl: 'https://editor-api.example.com', authentication: 'user-accounts',
-                 accessToken: 'shared-secret-must-not-leak' };
-  assert.match(core.managedConnection(base).error, /Sign in to Editing Helper/);
-  assert.equal(core.managedConnection(base).accessToken, undefined);
-  assert.deepEqual(core.managedConnection(base, 'header.body.signature'), {
-    baseUrl: 'https://editor-api.example.com', accessToken: 'header.body.signature',
-  });
-  assert.match(core.managedConnection({ apiBaseUrl: '', authentication: 'not-configured' }).error, /no public service/);
-  assert.match(core.managedConnection({ apiBaseUrl: 'http://api.example.com', authentication: 'user-accounts' }).error, /no public service/);
-  assert.match(core.managedConnection({ apiBaseUrl: 'https://editor-api.example.com', authentication: 'not-configured' }).error, /Public sign-in/);
-});
-
 test('guest demo uses publisher HTTPS URL but never forwards a shared or user token', () => {
   const guest = {
     apiBaseUrl: 'https://judge-demo.example.com',
@@ -227,12 +214,14 @@ test('guest demo uses publisher HTTPS URL but never forwards a shared or user to
   assert.deepEqual(core.managedConnection(guest), {
     baseUrl: 'https://judge-demo.example.com', accessToken: '',
   });
-  assert.deepEqual(core.managedConnection(guest, 'header.payload.signature'), {
-    baseUrl: 'https://judge-demo.example.com', accessToken: '',
-  });
-  assert.match(core.managedConnection({ ...guest, apiBaseUrl: 'http://judge-demo.example.com' }).error, /no public service/);
+  assert.match(core.managedConnection({ ...guest, authentication: 'user-accounts' }).error,
+    /not configured/);
+  assert.match(core.managedConnection({ ...guest, apiBaseUrl: 'http://judge-demo.example.com' }).error,
+    /HTTPS/);
   assert.match(core.managedConnection({ ...guest, apiBaseUrl: 'https://judge-demo.example.com/a' }).error,
-    /no public service|address/);
+    /HTTPS/);
+  assert.match(core.managedConnection({ apiBaseUrl: '', authentication: 'not-configured' }).error,
+    /not configured/);
 });
 
 test('config never stores bearer tokens even when passed extra fields', () => {
