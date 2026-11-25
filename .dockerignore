@@ -3,6 +3,8 @@
 !requirements.txt
 !app.py
 !knowledge_rag.py
+!demo_access.py
+!quota_limits.py
 !knowledge/
 !knowledge/sources/
 !knowledge/sources/*.jsonl
