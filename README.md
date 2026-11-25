@@ -6,8 +6,6 @@ Editing Helper helps editors learn an effect, solve a workflow problem, or find 
 
 ## Try the demo
 
-**No account, API key, Python installation, or server configuration is required.** The installers connect to our hosted demo backend automatically. An internet connection is required.
-
 Open the [GitHub Releases page](https://github.com/Helloworld9099/editing-helper/releases) and look for **v0.1.0 — Judge Demo** under Releases. Download the installer for your operating system from the release assets (not the source-code ZIP).
 
 | Platform | Installer | Requirements |
