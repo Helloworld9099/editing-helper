@@ -18,5 +18,8 @@
   "dependencies": {
     "dompurify": "3.4.18",
     "marked": "18.2.1"
-  }
+  },
+  "author": "Editing Helper",
+  "homepage": "https://github.com/Helloworld9099/editing-helper",
+  "desktopName": "org.editinghelper.app.desktop"
 }

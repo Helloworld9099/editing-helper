@@ -2,6 +2,7 @@ appId: org.editinghelper.desktop
 productName: Editing Helper
 directories:
   output: dist
+  buildResources: build
 asar: true
 files:
   - src/**/*
@@ -14,6 +15,8 @@ files:
   - '!tools/**/*'
 linux:
   category: AudioVideo
+  syncDesktopName: true
+  maintainer: 'Editing Helper <maintainer@editing-helper.invalid>'
   target:
     - AppImage
     - deb
