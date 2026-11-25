@@ -22,8 +22,7 @@ npm start
 ```
 
 1. Choose an editor (for example, **Kdenlive** or **DaVinci Resolve**) and click **Start**. All 11 requested editors are selectable; none is preselected. The version is optional.
-2. Click the floating pet, open **Settings**, and set **Server address** to
-   `http://127.0.0.1:8001`. Save.
+2. For the local mock only, launch Electron with `EDITING_HELPER_DEV_SETTINGS=1 npm start`, then right-click the pet, open **Settings**, set **Server address** to `http://127.0.0.1:8001`, and save.
 3. Ask **How do I make a camera shake?** The mock should echo the question and
    show **Editor: DaVinci Resolve**. It does not generate real instructions.
 4. Drag the pet to move it without scaling: the chat is a speech bubble with
@@ -54,7 +53,7 @@ mode uses regular framed windows. Windows and macOS are not verified.
 
 ## Connect to the real backend
 
-Set **Server address** back to `http://127.0.0.1:8000`. See the
+With developer Settings enabled, set **Server address** back to `http://127.0.0.1:8000`. See the
 [root README](../README.md) to start the local API and a runner. The desktop
 makes requests in Electron's main process, so no CORS change is needed.
 AI responses are rendered as sanitized Markdown in the chat bubble. Headings, lists, bold text, and code blocks display normally; potentially unsafe HTML and images are discarded. User messages and error messages are kept as literal text.
@@ -76,17 +75,19 @@ python launch.py --runner /path/to/llama-server --model /path/to/model.gguf -- \
 
 ## Judge Demo (zero setup for judges)
 
-A **judge-demo** installer can launch directly without sign-in, server URL or shared access token. Build it with `PUBLIC_RELEASE_MODE=demo` and `PUBLIC_API_URL` set to your HTTPS Northflank demo service. The backend requires Redis-enforced IP and global quotas before any model call. No Gemini key is ever placed in Electron. This is separate from the full Supabase user-account release.
+A packaged judge-demo installer opens with no email sign-in, no account settings, and no server or token fields. Judges select an editor and ask questions. The app connects automatically to the publisher's HTTPS Northflank demo server and sends **no shared credentials**.
 
-See [JUDGE_DEMO.md](JUDGE_DEMO.md) for the required deployment variables, tests, and downloadable installer candidates.
+Set the GitHub Actions variable `PUBLIC_API_URL` to the demo backend's HTTPS origin, then run **Build judge demo installers**. The demo FastAPI backend requires a private Redis quota store and explicit daily budget before calling Gemini. See [JUDGE_DEMO.md](JUDGE_DEMO.md) for the exact setup.
 
-## Connection modes
+## Developer connection settings (not in installers)
 
-**For your own developer checkout**: `cd desktop && npm start` uses your previously saved private Northflank connection. To edit its HTTPS URL or shared developer token, use `EDITING_HELPER_DEV_SETTINGS=1 npm start` (unpackaged only).
+Your local, unpackaged developer checkout continues to use its saved private Northflank URL and encrypted token. To edit those values run:
 
-**For a packaged public build**: users do not enter an API URL, shared access token or Gemini key. The app uses the publisher-configured HTTPS service, opens an email-code sign-in window, refreshes each user's session, and sends that user's token to FastAPI. Only the refresh token is persisted using the OS keyring when available. Public FastAPI verifies the account against Supabase and enforces Redis usage quotas before contacting Gemini.
+```bash
+EDITING_HELPER_DEV_SETTINGS=1 npm start
+```
 
-A public installer requires configuration of Supabase Auth, email delivery, Redis and Northflank. The default release-config.json contains placeholders and intentionally blocks connections. For instructions, see [PUBLIC_RELEASE.md](PUBLIC_RELEASE.md). The GitHub Actions build workflow generates candidate .AppImage/.deb/.exe/.dmg installers; unsigned macOS/Windows builds are not yet trusted by their platforms.
+Developer controls are unavailable in packaged judge builds. The checked-in release config intentionally has a blank URL; building an installer requires a valid `PUBLIC_API_URL`.
 
 ## Verification and scope
 
