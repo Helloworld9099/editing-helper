@@ -66,11 +66,9 @@ In GitHub → `Helloworld9099/editing-helper` → **Settings → Secrets and var
 PUBLIC_API_URL = https://YOUR-DEMO-SERVICE
 ```
 
-This is an ordinary public HTTPS URL, **not a secret**. No Supabase/SMTP/Redis values belong in the installer variables; Redis and Gemini credentials stay exclusively on Northflank.
+This is an ordinary public HTTPS URL, **not a secret**. Only the publisher's public HTTPS URL belongs in installer variables; Redis and Gemini credentials stay exclusively on Northflank.
 
-Open **Actions → Build public desktop installer candidates → Run workflow**, choose:
-- **Branch:** `main`
-- **release_mode:** `demo`
+Open **Actions → Build judge demo installers → Run workflow**, on the **main** branch.
 
 The workflow builds unsigned candidates for Linux (`.AppImage`, `.deb`), Windows (`.exe`), and macOS (`.dmg`). Download the artifacts only after successful checks. These are **not** automatically signed, notarized, published, or installed; test on clean systems before sharing. Windows SmartScreen and macOS Gatekeeper may warn about unsigned builds; plan signing/notarization for broader distribution.
 
@@ -81,7 +79,6 @@ From the repository root:
 ```bash
 git switch main
 git pull origin main
-export PUBLIC_RELEASE_MODE=demo
 export PUBLIC_API_URL=https://YOUR-DEMO-SERVICE
 python3 .github/scripts/write_release_config.py
 cd desktop
@@ -109,6 +106,6 @@ Don't commit a locally generated config unnecessarily.
 - Inspect packaged files to ensure no `GEMINI_API_KEY`, `COACH_ACCESS_TOKEN` or `COACH_REDIS_URL` appears.
 - Verify the editor knowledge links load and answers still show only `AI guidance` when unsourced.
 - Provide a short judge README (startup, supported editors, example prompt, limitations), and arrange a trusted way to share the installer.
-- Monitor usage during judging. When the evaluation finishes, set `COACH_AUTH_MODE=shared` again (with a private token) or stop the separate demo service entirely to disable anonymous calls.
+- Monitor usage during judging. When the evaluation finishes, stop the separate demo service entirely to disable anonymous calls.
 
-This judge-demo path is intentionally smaller than [PUBLIC_RELEASE.md](PUBLIC_RELEASE.md), which covers **optional** public user accounts and email OTP. Guest mode is easier to test but less resistant to deliberate abuse.
+Guest mode is simpler for judges, but cannot prevent determined abuse; stop the demo server after evaluation.
