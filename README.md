@@ -2,8 +2,6 @@
 
 **An AI-powered desktop companion for video editors.**
 
-Global AI Builders Challenge · v0.1.0 demo
-
 Editing Helper helps editors learn an effect, solve a workflow problem, or find a relevant resource without constantly switching between an editing program and tutorials. Its draggable floating mascot opens a small chat panel that stays accessible while you edit.
 
 ## Try the demo
