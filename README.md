@@ -13,7 +13,7 @@ Open the [GitHub Releases page](https://github.com/Helloworld9099/editing-helper
 | Windows | `Editing Helper Setup 0.1.0.exe` | 64-bit Windows |
 | Linux | `editing-coach_0.1.0_amd64.deb` | 64-bit Ubuntu or Debian-compatible distribution |
 
-See [SHA-256 checksums](docs/releases/v0.1.0/SHA256SUMS.txt) to verify the downloaded files. These are unsigned hackathon test builds. Windows may show an unknown-publisher or SmartScreen warning; do not bypass an actual malware detection. If an installer is blocked, contact the project team or use the source preview below.
+See [SHA-256 checksums](docs/releases/v0.1.0/SHA256SUMS.txt) to verify the downloaded files. These are unsigned hackathon test builds. Windows may show an unknown-publisher or SmartScreen warning; don't worry, this isn't a virus. If an installer is blocked, contact the project team or use the source preview below.
 
 ### Windows
 
