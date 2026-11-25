@@ -1,16 +1,7 @@
-name: Build public desktop installer candidates
+name: Build judge demo installers
 
 on:
   workflow_dispatch:
-    inputs:
-      release_mode:
-        description: "Installer audience: judge demo without login, or full user accounts"
-        type: choice
-        required: true
-        default: demo
-        options:
-          - demo
-          - users
 
 permissions:
   contents: read
@@ -29,10 +20,7 @@ jobs:
             target: mac
     runs-on: ${{ matrix.os }}
     env:
-      PUBLIC_RELEASE_MODE: ${{ inputs.release_mode }}
       PUBLIC_API_URL: ${{ vars.PUBLIC_API_URL }}
-      PUBLIC_SUPABASE_URL: ${{ vars.PUBLIC_SUPABASE_URL }}
-      PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -54,7 +42,7 @@ jobs:
         run: npx --yes electron-builder@26.18.0 --${{ matrix.target }} --x64 --publish never
       - uses: actions/upload-artifact@v4
         with:
-          name: editing-helper-${{ matrix.target }}-unsigned
+          name: editing-helper-judge-demo-${{ matrix.target }}-unsigned
           path: |
             desktop/dist/*.AppImage
             desktop/dist/*.deb
