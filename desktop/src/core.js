@@ -175,27 +175,20 @@ function activeConnection(cfg, savedToken = '', env = process.env) {
 
 // Public builds use a publisher-configured, nonsecret HTTPS backend address.
 // Never load developer URL/token values from a packaged app's userData directory.
-function managedConnection(releaseConfig, userAccessToken = '') {
-  const candidate = releaseConfig && releaseConfig.apiBaseUrl;
-  const { url, error } = validateBaseUrl(candidate);
-  const parsed = url ? new URL(url) : null;
-  if (error || !parsed || parsed.protocol !== 'https:' || parsed.pathname !== '/' ||
-      (parsed.port && parsed.port !== '443')) {
-    return { error: 'This release has no public service configured yet.' };
+// In judge builds, the server URL is public but every Gemini credential stays
+// on the demo FastAPI server. Guest requests are capped there via Redis.
+function managedConnection(releaseConfig) {
+  if (!releaseConfig || releaseConfig.authentication !== 'guest-demo') {
+    return { error: 'The judge demo backend is not configured.' };
   }
-  // Guest builds have only a public HTTPS endpoint; never bundle or send a shared secret.
-  // The server must enforce strict Redis quotas BEFORE calling the model.
-  if (releaseConfig.authentication === 'guest-demo') {
-    return { baseUrl: url, accessToken: '' };
+  const { url, error } = validateBaseUrl(releaseConfig.apiBaseUrl);
+  if (error || !url) return { error: 'The judge demo backend is not configured.' };
+  const origin = new URL(url);
+  if (origin.protocol !== 'https:' || origin.pathname !== '/' ||
+      (origin.port && origin.port !== '443')) {
+    return { error: 'The judge demo backend must be a secure HTTPS address.' };
   }
-  if (releaseConfig.authentication !== 'user-accounts') {
-    return { error: 'Public sign-in is not configured yet. This build cannot use the private developer server.' };
-  }
-  // A signed-in user's short-lived Supabase JWT is checked by FastAPI on every request.
-  if (!/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(userAccessToken)) {
-    return { error: 'Sign in to Editing Helper to continue.' };
-  }
-  return { baseUrl: url, accessToken: userAccessToken };
+  return { baseUrl: url, accessToken: '' };
 }
 
 // ------------------------------------------------------------ API client
