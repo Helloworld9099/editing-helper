@@ -57,6 +57,16 @@ Choose a different editor in Settings and verify that the app remembers the choi
 - Verify replies with no RAG references show exactly `AI guidance`; replies with references should retain source buttons.
 - Public sign-in and shared-store quotas are implemented behind **COACH_AUTH_MODE=users**, but are not production-verified until Supabase + SMTP + Redis + Northflank are configured and tested. Do not distribute any shared service token.
 
+### Judge Demo flow (no Supabase, configured backend required)
+
+- Create a separate `COACH_AUTH_MODE=demo` FastAPI deployment with Redis and `COACH_DEMO_GLOBAL_PER_DAY=100` (or a smaller test value).
+- Test unauthenticated `POST /v1/coach` returns 200 and never requires a bearer token.
+- Verify Redis quota exhaustion returns 429; Redis outage returns 503; **neither** should contact Gemini.
+- For local preview, run `PUBLIC_RELEASE_MODE=demo PUBLIC_API_URL=https://YOUR-DEMO-HOST python3 .github/scripts/write_release_config.py`, then `EDITING_HELPER_PUBLIC_PREVIEW=1 npm start` from `desktop/`.
+- Confirm no sign-in button, no access-token field, no server URL field, and no saved developer token sent; restore the checked-in release config after the preview.
+- In GitHub Actions, choose `release_mode=demo` to build unsigned OS installer candidates without Supabase variables.
+- Install and test the candidate on a clean device, then inspect the installer for embedded private secrets.
+
 ### Public user flow (requires configured services)
 
 - Run `python3 .github/scripts/write_release_config.py` from the repository root with valid `PUBLIC_API_URL`, `PUBLIC_SUPABASE_URL`, and `PUBLIC_SUPABASE_PUBLISHABLE_KEY` environment variables.

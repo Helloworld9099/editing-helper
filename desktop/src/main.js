@@ -19,6 +19,7 @@ const HIDE_MS = 10 * 60 * 1000;
 const forceNormal = process.argv.includes('--normal-window');
 // Settings for your local development environment only. Never available in packaged releases.
 const publicMode = app.isPackaged || process.env.EDITING_HELPER_PUBLIC_PREVIEW === '1';
+const accountMode = publicMode && releaseConfig.authentication === 'user-accounts';
 const developerMode = !publicMode && process.env.EDITING_HELPER_DEV_SETTINGS === '1';
 const RENDERER = path.join(__dirname, '..', 'renderer');
 
@@ -275,7 +276,7 @@ function openSettings(mode = 'settings') {
 
 // ----------------------------------------------------------- public sign-in
 function openSignin() {
-  if (!publicMode) return;
+  if (!accountMode) return;
   if (alive(signinWin)) { signinWin.show(); signinWin.focus(); return; }
   signinWin = new BrowserWindow({
     width: 440, height: 480, useContentSize: true,
@@ -294,15 +295,15 @@ function notifyAccountChanged() {
 function registerIpc() {
   ipcMain.handle('auth:status', async (e) => {
     if (!isOurs(e) && !isFrom(e, signinWin)) return null;
-    return publicMode ? { publicMode: true, ...publicAuth.status() } : { publicMode: false };
+    return accountMode ? { publicMode: true, ...publicAuth.status() } : { publicMode: false };
   });
   ipcMain.handle('auth:request-code', async (e, email) => {
-    if (!publicMode || !isFrom(e, signinWin)) return { ok: false, message: 'Not allowed.' };
+    if (!accountMode || !isFrom(e, signinWin)) return { ok: false, message: 'Not allowed.' };
     try { await publicAuth.requestCode(email); return { ok: true }; }
     catch (error) { return { ok: false, message: error.message }; }
   });
   ipcMain.handle('auth:verify-code', async (e, email, code) => {
-    if (!publicMode || !isFrom(e, signinWin)) return { ok: false, message: 'Not allowed.' };
+    if (!accountMode || !isFrom(e, signinWin)) return { ok: false, message: 'Not allowed.' };
     try {
       const status = await publicAuth.verifyCode(email, code);
       notifyAccountChanged();
@@ -312,7 +313,7 @@ function registerIpc() {
     } catch (error) { return { ok: false, message: error.message }; }
   });
   ipcMain.handle('auth:sign-out', async (e) => {
-    if (!publicMode || (!isOurs(e) && !isFrom(e, signinWin))) return { ok: false };
+    if (!accountMode || (!isOurs(e) && !isFrom(e, signinWin))) return { ok: false };
     await publicAuth.signOut();
     notifyAccountChanged();
     return { ok: true };
@@ -396,7 +397,7 @@ function registerIpc() {
     for (const w of [mascot, panel]) if (alive(w)) w.setAlwaysOnTop(cfg.keepOnTop, 'floating');
     if (wasSetup && cfg.setupDone) {
       createMascot(); createPanel();
-      if (publicMode && releaseReady(releaseConfig) && !publicAuth.status().signedIn) {
+      if (accountMode && releaseReady(releaseConfig) && !publicAuth.status().signedIn) {
         setTimeout(openSignin, 250);
       }
     }   // before setup window closes
@@ -424,7 +425,7 @@ function registerIpc() {
     let result;
     try {
       let userToken = '';
-      if (publicMode && publicAuth.status().configured) {
+      if (accountMode && publicAuth.status().configured) {
         userToken = await publicAuth.accessToken();
       }
       const connection = publicMode
@@ -448,7 +449,7 @@ function registerIpc() {
       busy = false;
       if (alive(mascot)) mascot.webContents.send('mascot:busy', false);
     }
-    if (publicMode && result.kind === 'http' && /HTTP 401/.test(result.message || '')) {
+    if (accountMode && result.kind === 'http' && /HTTP 401/.test(result.message || '')) {
       await publicAuth.signOut();
       notifyAccountChanged();
       openSignin();
@@ -518,7 +519,7 @@ function registerIpc() {
   });
   ipcMain.on('mascot:menu', (e) => {
     if (!isFrom(e, mascot)) return;
-    const accountMenu = publicMode ? [
+    const accountMenu = accountMode ? [
       { label: publicAuth.status().signedIn ? 'Sign out' : 'Sign in',
         click: () => publicAuth.status().signedIn
           ? void publicAuth.signOut().then(notifyAccountChanged)
@@ -564,7 +565,7 @@ if (!app.requestSingleInstanceLock()) {
     tokenFile = path.join(app.getPath('userData'), 'access-token.enc');
     userSessionFile = path.join(app.getPath('userData'), 'user-session.enc');
     cfg = core.loadConfig(cfgFile);
-    if (publicMode) {
+    if (accountMode) {
       publicAuth = makePublicAuth({
         config: releaseConfig, storageFile: userSessionFile, safeStorage,
       });
@@ -583,7 +584,7 @@ if (!app.requestSingleInstanceLock()) {
     screen.on('display-metrics-changed', reclampMascot);
     if (cfg.setupDone) {
       createMascot(); createPanel();
-      if (publicMode && releaseReady(releaseConfig) && !publicAuth.status().signedIn) openSignin();
+      if (accountMode && releaseReady(releaseConfig) && !publicAuth.status().signedIn) openSignin();
     } else { openSettings('setup'); }
   });
 }

@@ -218,6 +218,23 @@ test('public release uses publisher URL, never a shared developer credential', (
   assert.match(core.managedConnection({ apiBaseUrl: 'https://editor-api.example.com', authentication: 'not-configured' }).error, /Public sign-in/);
 });
 
+test('guest demo uses publisher HTTPS URL but never forwards a shared or user token', () => {
+  const guest = {
+    apiBaseUrl: 'https://judge-demo.example.com',
+    authentication: 'guest-demo',
+    accessToken: 'shared-secret-should-never-leave-device',
+  };
+  assert.deepEqual(core.managedConnection(guest), {
+    baseUrl: 'https://judge-demo.example.com', accessToken: '',
+  });
+  assert.deepEqual(core.managedConnection(guest, 'header.payload.signature'), {
+    baseUrl: 'https://judge-demo.example.com', accessToken: '',
+  });
+  assert.match(core.managedConnection({ ...guest, apiBaseUrl: 'http://judge-demo.example.com' }).error, /no public service/);
+  assert.match(core.managedConnection({ ...guest, apiBaseUrl: 'https://judge-demo.example.com/a' }).error,
+    /no public service|address/);
+});
+
 test('config never stores bearer tokens even when passed extra fields', () => {
   const f = tmpFile();
   core.saveConfig({ ...core.DEFAULTS, accessToken: 'secret-never-in-config', editor: 'Kdenlive' }, f);
