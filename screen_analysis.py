@@ -108,12 +108,14 @@ def local(host):
         return False
 
 
-def register_screen_analysis(api, auth, endpoint, extract_answer, timeout, access_token, knowledge_db):
+def register_screen_analysis(api, auth, endpoint, extract_answer, timeout, remote_auth_configured, knowledge_db):
     key = os.getenv("GEMINI_API_KEY", "").strip()
     model = os.getenv("GEMINI_VISION_MODEL", DEFAULT_VISION_MODEL).removeprefix("models/")
     calls = deque()
 
-    async def generate(payload):
+    async def generate(payload, *, public):
+        if public:
+            payload["generationConfig"] = {"maxOutputTokens": 2048}
         reply = await api.state.model_client.post(endpoint.format(model=model),
                                                   headers={"x-goog-api-key": key}, json=payload)
         reply.raise_for_status()
@@ -127,7 +129,7 @@ def register_screen_analysis(api, auth, endpoint, extract_answer, timeout, acces
         loopback = local(request.url.hostname) and request.client and local(request.client.host)
         if request.url.scheme != "https" and not loopback:
             raise HTTPException(403, "Remote screenshot uploads require HTTPS.")
-        if not loopback and not access_token:
+        if not loopback and not remote_auth_configured:
             raise HTTPException(503, "Configure a backend access token for remote analysis.")
         if not key or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}", model):
             raise HTTPException(503, "Configure GEMINI_API_KEY and a valid GEMINI_VISION_MODEL on the backend.")
@@ -162,6 +164,7 @@ def register_screen_analysis(api, auth, endpoint, extract_answer, timeout, acces
                         "contents": [{"role": "user", "parts": [part, {"text": json.dumps(context)}]}],
                     }
                     notes = []
+                    public = hasattr(request.state, "authenticated_user_id")
                     if knowledge_db is not None:
                         # Only this first pass receives the approved image. Use the visible
                         # technique to retrieve notes even when the user gave no question.
@@ -174,7 +177,7 @@ def register_screen_analysis(api, auth, endpoint, extract_answer, timeout, acces
                             "scene, likely editor, UI labels, creative context, possible mismatch, and unknowns. "
                             "Do not give instructions. If insufficient detail, say so."
                         )
-                        observations = (await generate(payload))[:6000]
+                        observations = (await generate(payload, public=public))[:6000]
                         terms = observations.splitlines()[0][:240].strip()
                         if terms.upper() == "MISMATCH":
                             return {"answer": f"The visible editor appears to differ from **{body.editor}**. "
@@ -195,7 +198,7 @@ def register_screen_analysis(api, auth, endpoint, extract_answer, timeout, acces
                             "contents": [{"role": "user", "parts": [
                                 {"text": json.dumps(context) + prompt_context(notes)}]}],
                         }
-                    answer = await generate(payload)
+                    answer = await generate(payload, public=public)
                     result = {"answer": answer}
                     if notes:
                         result["sources"] = [{k: n[k] for k in (

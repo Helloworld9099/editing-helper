@@ -17,6 +17,9 @@ p { margin: 5px 0 0; }
 .error { color: var(--error); min-height: 20px; margin-top: 13px; font-size: 13px; }
 .warn:empty, .error:empty { display: none; }
 .buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+/* The general Settings UI never exposes developer connection controls. */
+.developer-only { display: none; }
+body[data-developer="true"] .developer-only { display: block; }
 body[data-mode="setup"] .settings-only { display: none; }
 
 /* Setup uses a shorter native Electron window than the full Settings screen. */

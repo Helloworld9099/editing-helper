@@ -1,0 +1,6 @@
+{
+  "apiBaseUrl": "",
+  "authentication": "not-configured",
+  "supabaseUrl": "",
+  "supabasePublishableKey": ""
+}

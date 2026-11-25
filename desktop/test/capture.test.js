@@ -27,6 +27,7 @@ test('capture IPC restricts senders and source selection and restores visibility
       win = this;
     }
     static getAllWindows() { return [win]; }
+    show() { this.visible = true; }
     loadFile(file) { this.webContents.mainFrame.url = pathToFileURL(file).href; }
     getMediaSourceId() { return 'window:self'; }
     hide() { this.visible = false; }
@@ -53,7 +54,7 @@ test('capture IPC restricts senders and source selection and restores visibility
   vm.runInNewContext(fs.readFileSync(filename, 'utf8'), { __dirname: path.dirname(filename),
     process: { platform: 'linux', env: {} }, require: id => id === 'electron' ? electron : id === './core' ? core : require(id),
     module: mod, AbortController, setTimeout, clearTimeout });
-  mod.exports.createCaptureTool(() => ({ baseUrl: core.DEFAULT_API_URL }))();
+  await mod.exports.createCaptureTool(() => ({ baseUrl: core.DEFAULT_API_URL }))();
   const event = { sender: win.webContents, senderFrame: win.webContents.mainFrame };
   const call = (name, arg, e = event) => handlers.get('capture:' + name)(e, arg);
   assert.match((await call('list', 'window', { ...event, senderFrame: {} })).error, /Not allowed/);

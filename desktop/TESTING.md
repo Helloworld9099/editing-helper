@@ -16,7 +16,7 @@ redirects, oversized replies, config save/restore/corruption, URL validation, wi
 
 Loads the real `renderer/*.html` pages in headless Chromium with a fake bridge. Checks Enter / Shift+Enter / Esc,
 duplicate-submit blocking, waiting state, sanitized Markdown replies, no focus steal, click vs drag vs
-right-click, setup/settings flows. Screenshots land in `test/ui/out/`.
+right-click, setup/settings flows, and screenshot consent, retry, and chat rendering. Screenshots land in `test/ui/out/`.
 This does **not** exercise real Electron windows. That's layer 3. (Playwright is test tooling only; the app itself is JS.)
 
 ## 3. The real app against a mock backend (no Ollama needed)
@@ -27,7 +27,7 @@ Terminal A:
 
 Terminal B:
 
-    npm start
+    EDITING_HELPER_DEV_SETTINGS=1 npm start
 
 First launch: choose DaVinci Resolve and click Start, then right-click the pet ->
 Settings -> Server address `http://127.0.0.1:8001` -> Save. Open the panel and type:
@@ -49,9 +49,36 @@ Then point Settings back to `http://127.0.0.1:8000` and try your real FastAPI ba
 
 Choose a different editor in Settings and verify that the app remembers the choice after restarting. Repeat a short question with Kdenlive, Adobe Premiere Pro, and one web-based editor (Clipchamp or Canva). Verify that the selected name and optional version reach the mock backend in the returned message. The app provides AI guidance, not verified instructions or direct control of an editing program. The unit tests check all eleven editor names and verify that unsupported values are rejected before making a request.
 
+### Connection Settings and public-release checks
+
+- Launch `npm start` without `EDITING_HELPER_DEV_SETTINGS`: the ordinary Settings screen must not show Server address, Access token, or Forget saved token. Saving editor/window preferences must not change connection configuration.
+- Launch the **unpackaged** app with `EDITING_HELPER_DEV_SETTINGS=1 npm start`: the developer-only connection controls should be visible. The shared token must never be returned by config:get, saved in config.json, or sent to a different overridden host.
+- In an actual **packaged** build, the app must not read local developer tokens, environment token overrides or mutable saved API URLs. The blank default release-config.json intentionally fails closed; a configured release uses email OTP, per-user JWT verification on the backend and Redis quotas.
+- Verify replies with no RAG references show exactly `AI guidance`; replies with references should retain source buttons.
+- Public sign-in and shared-store quotas are implemented behind **COACH_AUTH_MODE=users**, but are not production-verified until Supabase + SMTP + Redis + Northflank are configured and tested. Do not distribute any shared service token.
+
+### Public user flow (requires configured services)
+
+- Run `python3 .github/scripts/write_release_config.py` from the repository root with valid `PUBLIC_API_URL`, `PUBLIC_SUPABASE_URL`, and `PUBLIC_SUPABASE_PUBLISHABLE_KEY` environment variables.
+- Start `EDITING_HELPER_PUBLIC_PREVIEW=1 npm start` from `desktop/`. Select an editor, request an email OTP, and verify it. No shared service token should be shown, required or sent.
+- Sign in, ask an editing question, quit, relaunch, confirm session refresh when a secure keyring is available, then sign out.
+- Verify missing/expired/fabricated/unconfirmed tokens fail with 401; user daily quota returns 429; Redis outage returns 503 without calling Gemini.
+- With no secure keyring (Linux `basic_text`), sign-in should still work for the current session, but not persist an unencrypted refresh token.
+- Build candidate installers via GitHub Actions and test `.AppImage`, `.deb`, `.exe`, `.dmg` on their native operating systems. Review signing/notarization requirements.
+
 ### RAG reference check
 
 With the RAG-enabled Northflank backend, select Kdenlive and optionally version 26.08, then ask about the Broken TV glitch. A related Kdenlive manual reference button should appear; clicking it should open the original HTTPS documentation in the browser only after you click. Test DaVinci Resolve 20 with Dynamic Zoom. An unrelated editor should not show the Kdenlive or Resolve documentation as its own source.
+
+### Screen Analysis smoke test
+
+Use a Gemini-enabled backend and an image you are comfortable sending to Google.
+The text mock in this guide treats `/v1/screen-analysis` as an unknown route.
+
+- [ ] Capture an editor display or window and confirm the preview. Cancel before clicking **Analyze Screenshot** and verify no analysis appears in chat.
+- [ ] Import a PNG or JPEG, crop it, choose a mode and content type, and submit. Confirm the reply appears under **Screenshot analysis** and that source buttons, if present, open the matching documentation.
+- [ ] Try an unavailable backend, then restore it and retry from the same preview. Check that the options remain in place.
+- [ ] Try a blank screenshot and a visible editor that differs from the setting. With documentation lookup enabled, confirm the app asks for a clearer capture or the intended editor.
 
 ### Window behavior checklist (what only your laptop can answer)
 
@@ -71,5 +98,5 @@ Open any other app (a text editor, browser, your video editor, anything) and ver
       Dragging the pet still moves it without resizing it. The chat size persists on relaunch.
 - [ ] Esc collapses; clicking the pet toggles; dragging doesn't open the panel; right-click menu works.
 - [ ] Hide 10 min, then launch `npm start` again: pet returns.
-- [ ] Works the same over a non-editing app, since the widget never reads or controls other apps.
+- [ ] Works the same over a non-editing app with Screen Analysis closed.
 - [ ] If any of this fails: `npm run start:normal` and note what broke (compositor, GNOME/KDE/etc.).

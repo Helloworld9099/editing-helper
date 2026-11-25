@@ -6,6 +6,7 @@ import re
 import sqlite3
 
 from knowledge_rag import SYSTEM_GUIDANCE, index_path, prompt_context, search_notes
+from public_access import PublicAccess
 from contextlib import asynccontextmanager
 from secrets import compare_digest
 
@@ -70,7 +71,7 @@ def gemini_answer(result):
     )
 
 
-def create_app(*, model=None, timeout=60.0, transport=None, provider=None):
+def create_app(*, model=None, timeout=60.0, transport=None, provider=None, quota_store=None):
     provider = provider or os.environ.get("COACH_PROVIDER", "ollama")
     if provider not in PROVIDERS:
         raise ValueError("COACH_PROVIDER must be ollama, llama.cpp, groq, or gemini.")
@@ -78,6 +79,25 @@ def create_app(*, model=None, timeout=60.0, transport=None, provider=None):
     groq = provider == "groq"
     gemini = provider == "gemini"
     hosted = groq or gemini
+    auth_mode = os.environ.get("COACH_AUTH_MODE", "shared").strip()
+    if auth_mode not in {"shared", "users"}:
+        raise ValueError("COACH_AUTH_MODE must be shared or users.")
+    public_access = None
+    managed_redis = None
+    if auth_mode == "users":
+        if quota_store is None:
+            redis_url = os.environ.get("COACH_REDIS_URL", "").strip()
+            if not redis_url.startswith(("redis://", "rediss://")):
+                raise ValueError("COACH_REDIS_URL is required for public user quotas.")
+            from redis.asyncio import from_url
+            managed_redis = from_url(redis_url, decode_responses=True, socket_connect_timeout=3,
+                                     socket_timeout=3, health_check_interval=30)
+            quota_store = managed_redis
+        public_access = PublicAccess(
+            supabase_url=os.environ.get("AUTH_SUPABASE_URL", "").strip(),
+            publishable_key=os.environ.get("AUTH_SUPABASE_PUBLISHABLE_KEY", "").strip(),
+            redis_store=quota_store,
+        )
     rag_setting = os.environ.get("COACH_RAG_ENABLED", "0").strip()
     if rag_setting not in {"0", "1"}:
         raise ValueError("COACH_RAG_ENABLED must be 0 or 1.")
@@ -112,7 +132,7 @@ def create_app(*, model=None, timeout=60.0, transport=None, provider=None):
         upstream_headers["x-goog-api-key"] = gemini_key
 
     access_token = os.environ.get("COACH_ACCESS_TOKEN", "").strip()
-    if not access_token and (hosted or os.environ.get("COACH_REQUIRE_AUTH") == "1"):
+    if auth_mode == "shared" and not access_token and (hosted or os.environ.get("COACH_REQUIRE_AUTH") == "1"):
         raise ValueError("COACH_ACCESS_TOKEN is required for hosted deployments.")
     if access_token and not re.fullmatch(r"[A-Za-z0-9._~+/=-]+", access_token):
         raise ValueError("COACH_ACCESS_TOKEN must be a valid bearer token.")
@@ -125,7 +145,22 @@ def create_app(*, model=None, timeout=60.0, transport=None, provider=None):
 
     bearer = HTTPBearer(auto_error=False)
 
-    async def require_access_token(credentials=Depends(bearer)):
+    async def require_access_token(request: Request, credentials=Depends(bearer)):
+        if auth_mode == "users":
+            if credentials is None:
+                raise HTTPException(401, "Sign in to continue.", headers={"WWW-Authenticate": "Bearer"})
+            # Malformed tokens fail locally; valid-shaped tokens are throttled
+            # before incurring a verification request to Supabase.
+            candidate = credentials.credentials
+            if not re.fullmatch(r"[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+", candidate or ""):
+                raise HTTPException(401, "Sign in to continue.", headers={"WWW-Authenticate": "Bearer"})
+            await public_access.throttle_identity_lookup(request)
+            user_id = await public_access.authenticate(
+                candidate, request.app.state.model_client,
+            )
+            await public_access.charge(user_id, request)
+            request.state.authenticated_user_id = user_id
+            return
         if access_token and (
             credentials is None
             or not compare_digest(credentials.credentials.encode(), access_token.encode())
@@ -142,7 +177,11 @@ def create_app(*, model=None, timeout=60.0, transport=None, provider=None):
             transport=transport, trust_env=False, follow_redirects=False, timeout=timeout
         ) as client:
             api.state.model_client = client
-            yield
+            try:
+                yield
+            finally:
+                if managed_redis is not None:
+                    await managed_redis.aclose()
 
     api = FastAPI(title="Editing Helper API", lifespan=lifespan)
     api.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts)
@@ -153,7 +192,7 @@ def create_app(*, model=None, timeout=60.0, transport=None, provider=None):
         return {"status": "ok"}
 
     @api.post("/v1/coach", response_model=CoachReply, response_model_exclude_none=True,
-              dependencies=[Depends(require_access_token)] if access_token else [])
+              dependencies=[Depends(require_access_token)] if access_token or auth_mode == "users" else [])
     async def coach(body: CoachRequest, request: Request):
         slot = request.app.state.slot
         if slot.locked():
@@ -178,6 +217,9 @@ def create_app(*, model=None, timeout=60.0, transport=None, provider=None):
                     model_question = question + prompt_context(notes)
                     if gemini:
                         payload = {"contents": [{"role": "user", "parts": [{"text": model_question}]}]}
+                        if auth_mode == "users":
+                            # Cap response generation for a billed public endpoint.
+                            payload["generationConfig"] = {"maxOutputTokens": 2048}
                         if rag_enabled:
                             payload["systemInstruction"] = {"parts": [{"text": SYSTEM_GUIDANCE}]}
                     else:
@@ -218,8 +260,11 @@ def create_app(*, model=None, timeout=60.0, transport=None, provider=None):
                         review_status=n["review_status"], category=n["category"]) for n in notes
         ] or None)
 
-    register_screen_analysis(api, require_access_token, GEMINI_GENERATE, gemini_answer, timeout, access_token,
-                             knowledge_db if rag_enabled else None)
+    register_screen_analysis(
+        api, require_access_token, GEMINI_GENERATE, gemini_answer, timeout,
+        remote_auth_configured=bool(access_token) or auth_mode == "users",
+        knowledge_db=knowledge_db if rag_enabled else None,
+    )
     return api
 
 

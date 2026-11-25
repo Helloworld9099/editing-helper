@@ -77,7 +77,7 @@
           }
         }
       } else {
-        foot.textContent = 'AI guidance · no matching documentation found';
+        foot.textContent = 'AI guidance';
       }
       el.appendChild(foot);
     }
@@ -121,6 +121,7 @@
     if (result && result.ok) {
       addMessage('coach', 'Coach', result.answer, result.sources);
     } else {
+      if (result?.kind === 'auth') api.openSignIn?.();
       addMessage('error', null, (result && result.message) || 'Something went wrong. Try again.');
       if (!input.value.trim()) input.value = q;   // let the user retry without retyping
     }
@@ -159,7 +160,9 @@
   sendBtn.addEventListener('click', submit);
   document.getElementById('analyze-screen').addEventListener('click', async () => {
     try {
-      if ((await api.openScreenAnalysis()).ok) return;
+      const result = await api.openScreenAnalysis();
+      if (result.ok) return;
+      if (result.message) { addMessage('error', null, result.message); return; }
     } catch { /* the window could not be opened */ }
     addMessage('error', null, 'Could not open Screen Analysis. Try again.');
   });
@@ -188,6 +191,26 @@
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') api.closePanel(); });
   document.getElementById('collapse').addEventListener('click', () => api.closePanel());
   document.getElementById('settings').addEventListener('click', () => api.openSettings());
+  const authBtn = document.getElementById('auth');
+  async function updateAuth() {
+    if (!api.authStatus) return;
+    let state;
+    try { state = await api.authStatus(); } catch { return; }
+    authBtn.hidden = !state?.publicMode;
+    if (state?.publicMode) {
+      authBtn.textContent = state.signedIn ? 'Sign out' : 'Sign in';
+      authBtn.title = state.signedIn ? 'Sign out of your account' : 'Sign in with an email code';
+      authBtn.disabled = false;
+    }
+  }
+  authBtn.addEventListener('click', async () => {
+    const state = await api.authStatus();
+    if (!state?.signedIn) api.openSignIn();
+    else { await api.signOut(); await updateAuth(); }
+  });
+  api.on('panel:auth-changed', () => { void updateAuth(); });
+  void updateAuth();
+
 
   async function showEditor() {
     let cfg;
@@ -201,7 +224,8 @@
   api.on('panel:side', (side) => {
     if (side === 'left' || side === 'right') document.body.dataset.panelSide = side;
   });
-  api.on('panel:screen-analysis', ({ answer, sources } = {}) => {
+  api.on('panel:screen-analysis', ({ answer, sources, error } = {}) => {
+    if (error) addMessage('error', null, error);
     if (typeof answer === 'string' && answer.trim()) addMessage('coach', 'Coach · Screenshot analysis', answer, sources);
   });
   api.on('panel:config-changed', () => { void showEditor(); });

@@ -1,8 +1,8 @@
 # Editing Coach desktop frontend
 
-This Electron app is a floating desktop companion. It sends a question and the
-selected editor (plus the optional version) to the Editing Helper API. It does
-not read, upload, or control your editor, clips, or screen.
+This Electron app is a floating desktop companion for editing questions and
+screenshot-guided suggestions. It sends the selected editor and optional version
+to the Editing Helper API.
 
 ## Test the frontend without a model
 
@@ -18,7 +18,7 @@ Leave that terminal open. In a second terminal, from the repository root:
 
 ```bash
 cd desktop
-npm start
+EDITING_HELPER_DEV_SETTINGS=1 npm start
 ```
 
 1. Choose an editor (for example, **Kdenlive** or **DaVinci Resolve**) and click **Start**. All 11 requested editors are selectable; none is preselected. The version is optional.
@@ -59,6 +59,51 @@ Set **Server address** back to `http://127.0.0.1:8000`. See the
 makes requests in Electron's main process, so no CORS change is needed.
 AI responses are rendered as sanitized Markdown in the chat bubble. Headings, lists, bold text, and code blocks display normally; potentially unsafe HTML and images are discarded. User messages and error messages are kept as literal text.
 
+## Analyze a screenshot
+
+Use a backend with Screen Analysis enabled and choose your editor and optional
+version in **Settings**. In a configured public build, sign in with your email
+before opening Screen Analysis. [Backend setup](../README.md#enable-screen-analysis)
+
+1. Click **Analyze Screen** next to the chat composer, or choose it from the pet’s right-click menu.
+2. Choose **Choose display**, **Choose window**, or **Open screenshot…** for a PNG or JPEG. If a source list appears, select the source and click **Capture**. On Wayland, the system may open its own screen-sharing picker.
+3. Check the preview. To share a smaller area, open **Crop to a region**, enter the rectangle in image pixels, and click **Apply crop**. Use **Retake** for a different image or **Cancel** to close the window.
+4. Pick an **Analysis mode**. Leave **Content type** set to **Auto-detect** or choose a category such as **Minecraft / Gaming**. Add creative context or a specific question if it will help.
+5. Click **Analyze Screenshot** to send the reviewed preview. The answer appears in chat under **Screenshot analysis**. If the request fails, the review window keeps the preview and options so you can retry.
+
+| Mode | When to use it |
+| --- | --- |
+| **Improve This Scene** | Ask for the most useful visible changes to framing, readability, color, or composition. |
+| **How Do I Create This Effect?** | Name or describe the effect in **Question** to get an editor-specific workflow and suggested starting settings. |
+| **Fix What I’m Doing** | Describe the symptom and capture the relevant controls or preview so the coach can suggest checks. |
+
+A screenshot is a single still. Capture the relevant controls at a readable
+size, and describe any motion, timing, or audio issue in the question.
+
+### Screenshot privacy
+
+Screen Analysis takes a single capture when you pick a source. The app sends
+the reviewed preview, editor details, and any context or question only after
+you click **Analyze Screenshot**. The review window names the backend
+destination. The backend forwards the image to Google Gemini even if you run
+FastAPI locally. Editing Helper keeps working images in memory and clears the
+preview when you close it or the analysis succeeds. Closing the window after
+submission cancels the desktop request. The backend or Gemini may already have
+received the image. [Gemini API terms](https://ai.google.dev/gemini-api/terms)
+
+### Capture permissions and troubleshooting
+
+| Platform or symptom | What to try |
+| --- | --- |
+| **Ubuntu on X11 or XWayland** | The app defaults to X11/XWayland. Bring the target window onscreen and retry. Some native Wayland windows may be absent from the XWayland list. If the mascot positioning interferes, try `npm run start:normal`. |
+| **Ubuntu on native Wayland** | For a source launch, try `EDITING_COACH_NATIVE_WAYLAND=1 npm start` from `desktop/`. Choose a source in the system picker and allow sharing. If the picker is missing, check that PipeWire and the XDG Desktop Portal backend for your GNOME or KDE session are running. The compositor can restrict which sources are available. |
+| **macOS** | Allow Editing Helper under **System Settings → Privacy & Security → Screen & System Audio Recording**, then relaunch. [Apple’s permission guide](https://support.apple.com/guide/mac-help/control-access-to-screen-and-system-audio-recording-mchld6aa7d23/mac) |
+| **Windows, or an empty or black preview** | Protected or minimized content may be unavailable. Restore the target window and retry. If native capture is unavailable, use the system screenshot tool and select **Open screenshot…** in Editing Helper. |
+| **Upload or service error** | Select a valid PNG or JPEG under 24 MiB. The app reduces the reviewed image to fit the analysis limits. For connection, model, or sign-in errors, check the backend URL, HTTPS, Gemini settings, and account or access token. |
+
+Native capture was verified on Linux X11. Native Wayland, Windows, macOS, and
+multi-monitor behavior still need platform verification.
+
 ## Supported editing software
 
 The editor selector offers AI guidance for **Adobe Premiere Pro, DaVinci Resolve, Kdenlive, Shotcut, CapCut, ACDSee Luxea, Lightworks, Clipchamp, OpenShot, Canva, and iMovie**. The choice and optional version are sent to the same FastAPI endpoint. The app is **not** integrated with the editor's controls or files, and answers are not verified against documentation for every editor/version; check menu names and edition limitations before following advanced instructions.
@@ -74,34 +119,16 @@ python launch.py --runner /path/to/llama-server --model /path/to/model.gguf -- \
   "$PWD/desktop/node_modules/.bin/electron" "$PWD/desktop"
 ```
 
-## Connect to a hosted backend
+## Connection modes
 
-**One-time setup (recommended):**
+**For your own developer checkout**: `cd desktop && npm start` uses your previously saved private Northflank connection. To edit its HTTPS URL or shared developer token, use `EDITING_HELPER_DEV_SETTINGS=1 npm start` (unpackaged only).
 
-1. Launch the app normally with `cd desktop && npm start`.
-2. Right-click the pet and open **Settings**.
-3. Enter the **Server address** (the HTTPS URL for your Northflank FastAPI service).
-4. Enter the **Access token** once (the same value configured as `COACH_ACCESS_TOKEN` on Northflank). Click **Save**.
-5. On later launches, simply run `npm start`. The server URL is already saved in `config.json`, while the access token is encrypted separately using Electron's OS keyring support.
+**For a packaged public build**: users do not enter an API URL, shared access token or Gemini key. The app uses the publisher-configured HTTPS service, opens an email-code sign-in window, refreshes each user's session, and sends that user's token to FastAPI. Only the refresh token is persisted using the OS keyring when available. Public FastAPI verifies the account against Supabase and enforces Redis usage quotas before contacting Gemini.
 
-You can replace a token by entering a new value in Settings, or select **Forget saved access token** to remove it. The token is **never returned to the HTML renderer, written to config.json, or committed to GitHub**. Electron's main process uses it only as an HTTPS bearer token (or to a loopback localhost server).
-
-On Ubuntu, secure saving requires an unlocked GNOME Keyring or KWallet. If Electron selects its insecure Linux `basic_text` backend, the app **refuses to store** the token and Settings explains that the secure keyring is unavailable. If necessary, continue with the previous environment-variable launch method; avoid plaintext token files in the repository.
-
-**Optional environment overrides (development / insecure keyring fallback):**
-
-```bash
-read -rsp 'Coach access token: ' EDITING_HELPER_ACCESS_TOKEN
-printf '\n'
-EDITING_HELPER_API=https://coach.example.com \
-  EDITING_HELPER_ACCESS_TOKEN="$EDITING_HELPER_ACCESS_TOKEN" npm start
-unset EDITING_HELPER_ACCESS_TOKEN
-```
-
-`EDITING_HELPER_API` overrides the saved URL for a single launch. `EDITING_HELPER_ACCESS_TOKEN` independently overrides the saved token for that process. The Gemini API key remains on the FastAPI backend, not the desktop.
+A public installer requires configuration of Supabase Auth, email delivery, Redis and Northflank. The default release-config.json contains placeholders and intentionally blocks connections. For instructions, see [PUBLIC_RELEASE.md](PUBLIC_RELEASE.md). The GitHub Actions build workflow generates candidate .AppImage/.deb/.exe/.dmg installers; unsigned macOS/Windows builds are not yet trusted by their platforms.
 
 ## Verification and scope
 
 Run `npm test` for the client tests. See [TESTING.md](TESTING.md)
 for renderer tests and the manual desktop checklist. Desktop rendering and
-mock replies do not establish model accuracy. Related source references appear when the backend retrieves reviewed knowledge notes; they do not guarantee that every generated step is correct. A fully verified tutorial library, screen capture, installers, and packaged weights are not implemented by this integration. For adding documentation notes, see [knowledge/README.md](../knowledge/README.md).
+mock replies do not establish model accuracy. Related source references appear when the backend retrieves reviewed knowledge notes; they do not guarantee that every generated step is correct. See the [public release guide](PUBLIC_RELEASE.md) for installer builds. For adding documentation notes, see [knowledge/README.md](../knowledge/README.md).

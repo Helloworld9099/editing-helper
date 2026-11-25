@@ -2,7 +2,7 @@ name: Editing Helper checks
 
 on:
   push:
-    branches: [main, feat/curated-rag-knowledge-20261124]
+    branches: [main, feat/curated-rag-knowledge-20261124, feature/screen-analysis]
   pull_request:
 
 permissions:

@@ -2,7 +2,7 @@
 
 **Desktop app:** See [desktop/README.md](desktop/README.md) to launch the floating frontend and test it without a model.
 
-API for the Editing Helper desktop companion. It returns model-generated editing advice through Ollama, llama.cpp, Groq, or Google Gemini.
+API for the Editing Helper desktop companion. It returns model-generated editing advice through Ollama, llama.cpp, Groq, or Google Gemini. Screen Analysis uses Gemini to review a screenshot you choose and returns editing suggestions in the desktop chat.
 
 ## Start on Ubuntu
 
@@ -32,9 +32,42 @@ curl -fsS http://127.0.0.1:8000/v1/coach \
   -d '{"question":"Reply with hello."}'
 ```
 
-## Remember hosted desktop connection
+## Private development and public release
 
-The Electron desktop app can remember your Northflank HTTPS server address and an OS-encrypted bearer token. Open **Settings**, enter **Server address** and **Access token** once, then launch with `cd desktop && npm start` in future sessions. The URL is stored in the user's Electron config; the bearer token is encrypted separately with Electron safeStorage and is never added to `config.json` or the repository. On Linux, the insecure `basic_text` fallback is rejected; unlock GNOME Keyring/KWallet to save credentials. See [desktop/README.md](desktop/README.md#connect-to-a-hosted-backend).
+Your existing Northflank backend still works in `COACH_AUTH_MODE=shared` with `COACH_ACCESS_TOKEN`. Do **not** distribute that token. Normal desktop Settings hides both connection fields; for local developer configuration, run `EDITING_HELPER_DEV_SETTINGS=1 npm start`.
+
+A separate public deployment now supports `COACH_AUTH_MODE=users`. In that mode, FastAPI verifies each signed-in user against Supabase Auth's `/auth/v1/user` endpoint and applies atomic Redis quotas **before** making any Gemini request. An Electron public release uses passwordless email OTP and stores only an encrypted per-user refresh token (or a temporary session if no secure keyring exists). No shared token is shipped.
+
+**External setup is still required:** create a Supabase Auth project with custom SMTP and a numeric OTP email template, provision Redis, deploy a separate Northflank public service with its environment variables, configure GitHub Actions public release variables, then build and test the installers. The checked-in release config is intentionally blank and fails closed until configured. Windows/macOS unsigned installers require signing/notarization before a general release.
+
+See [desktop/PUBLIC_RELEASE.md](desktop/PUBLIC_RELEASE.md) for step-by-step configuration and validation. The build-candidate workflow is `.github/workflows/build-public-installers.yml`.
+
+## Enable Screen Analysis
+
+Screen Analysis uses Gemini for images even when ordinary chat uses Ollama, llama.cpp, or Groq. Set these variables on the backend.
+
+| Variable | Purpose |
+| --- | --- |
+| `GEMINI_API_KEY` | Required for Screen Analysis. Create a key in [Google AI Studio](https://aistudio.google.com/app/apikey) and store it in the backend environment or secret manager. |
+| `GEMINI_VISION_MODEL` | Optional image-capable Gemini model ID. Defaults to [`gemini-3.6-flash`](https://ai.google.dev/gemini-api/docs/models/gemini-3.6-flash). |
+| `COACH_RAG_ENABLED` | Set to `1` to look up documentation for the selected editor and version. The Docker image enables this and builds the index. |
+
+For a local server, install [the backend dependencies](#start-on-ubuntu) and run the following from the repository root in Bash. These commands enable documentation lookup.
+
+~~~bash
+.venv/bin/python knowledge_rag.py build
+read -rsp 'Gemini API key: ' GEMINI_API_KEY
+printf '\n'
+GEMINI_API_KEY="$GEMINI_API_KEY" COACH_RAG_ENABLED=1 \
+  .venv/bin/python -m uvicorn app:app --host 127.0.0.1 --port 8000
+unset GEMINI_API_KEY
+~~~
+
+For a hosted server, set the variables in the hosting dashboard and restart the service. Remote screenshot uploads require HTTPS and either the shared access token or a verified public account, depending on how you configured the server. [Hosted setup](#deploy-on-northflank)
+
+The desktop sends the approved preview to `POST /v1/screen-analysis`. The API accepts a base64 PNG or JPEG up to 5 MiB with a maximum of 2560 pixels on either side, plus the mode, editor, optional editor version, content type, creative context, and question. It validates and re-encodes the image without its original metadata before sending it to Google Gemini. With documentation lookup enabled, Gemini first inspects the image. The backend searches its local SQLite index using the observations and sends a text-only follow-up with matching references. The reply contains Markdown in `answer` and, when available, reference records in `sources`.
+
+Editing Helper processes screenshots in memory and keeps the generated text in the desktop conversation. Google handles the screenshot and analysis context under the terms for your Gemini API plan. Review the preview before sending and crop or remove anything private. [Desktop workflow and capture troubleshooting](desktop/README.md#analyze-a-screenshot) · [Gemini API terms](https://ai.google.dev/gemini-api/terms)
 
 ## Editor knowledge base (RAG)
 
@@ -86,7 +119,7 @@ For Groq, use the following provider settings.
 | `COACH_MODEL` | A [Groq chat model ID](https://console.groq.com/docs/api-reference#chat-create), for example `llama-3.3-70b-versatile` |
 | `GROQ_API_KEY` | Your Groq API key, injected as a server secret |
 
-Gemini, Groq, and the production container require `COACH_ACCESS_TOKEN` at startup. For a hosted deployment outside Docker, `COACH_REQUIRE_AUTH=1` also makes the token mandatory with either local provider. Setting `COACH_ACCESS_TOKEN` protects `/v1/coach` with every provider.
+In the default private `COACH_AUTH_MODE=shared`, Gemini, Groq, and the production container require `COACH_ACCESS_TOKEN` at startup. A separate `COACH_AUTH_MODE=users` service instead requires verified Supabase accounts and shared Redis quotas; the old shared token is not used in this mode. For a hosted deployment outside Docker, `COACH_REQUIRE_AUTH=1` also makes the token mandatory with either local provider. In shared-token mode, setting `COACH_ACCESS_TOKEN` protects both `/v1/coach` and `/v1/screen-analysis`. A public service with `COACH_AUTH_MODE=users` requires a signed-in user and applies the same usage quotas to both endpoints.
 
 [.env.example](.env.example) shows the runtime settings. When running outside Northflank, export the settings in the environment that starts Uvicorn.
 
@@ -96,7 +129,7 @@ Use a Northflank command health check to probe the loopback address. [Northflank
 python -c 'from urllib.request import urlopen; urlopen("http://127.0.0.1:8000/health", timeout=2).close()'
 ```
 
-To connect Electron, set `EDITING_HELPER_API` to the HTTPS service URL and `EDITING_HELPER_ACCESS_TOKEN` to the server's `COACH_ACCESS_TOKEN` in the environment that launches Electron. See [desktop setup](desktop/README.md#connect-to-a-hosted-backend).
+To connect Electron, set `EDITING_HELPER_API` to the HTTPS service URL and `EDITING_HELPER_ACCESS_TOKEN` to the server's `COACH_ACCESS_TOKEN` in the environment that launches Electron. See [developer setup](desktop/README.md#connection-modes). Public releases use per-user email-code sign-in rather than the shared developer token.
 
 ## Backend tests
 
@@ -104,10 +137,10 @@ To connect Electron, set `EDITING_HELPER_API` to the HTTPS service URL and `EDIT
 .venv/bin/python -m unittest discover -s tests -v
 ```
 
-Tests use simulated Ollama, llama.cpp, Groq, and Gemini responses and cover access tokens, allowed hosts, public health checks, upstream errors, knowledge retrieval, and Gemini context injection.
+Tests use simulated Ollama, llama.cpp, Groq, and Gemini responses and cover access tokens, allowed hosts, public health checks, upstream errors, knowledge retrieval, screenshot validation, and Gemini context injection.
 
 ## Local desktop build and training
 
 - Existing frontend clients still work. Optional `editor` and `version` fields let a new client include the user's selected editor without changing the response.
 - The default development runner above is Ollama. The offline release path uses [llama.cpp](https://github.com/ggml-org/llama.cpp) with the same API and a pinned GGUF, without an Ollama account. Review [Ollama's eligibility terms](https://ollama.com/terms) before using its services.
-- See [training/README.md](training/README.md) to start a free-GPU smoke run, export and compare weights, and launch the actual desktop frontend. This branch provides a launcher, not an installer; the desktop frontend and checkpoint are separate inputs.
+- See [training/README.md](training/README.md) to start a free-GPU smoke run, export and compare weights, and launch the actual desktop frontend. A manual GitHub Actions workflow now builds unsigned Linux, Windows, and macOS installer candidates after public service configuration. Code signing and real-device verification are still required.

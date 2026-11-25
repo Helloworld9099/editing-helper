@@ -1,0 +1,30 @@
+appId: org.editinghelper.desktop
+productName: Editing Helper
+directories:
+  output: dist
+asar: true
+files:
+  - src/**/*
+  - renderer/**/*
+  - package.json
+  - node_modules/marked/**/*
+  - node_modules/dompurify/**/*
+  - '!**/*.map'
+  - '!test/**/*'
+  - '!tools/**/*'
+linux:
+  category: AudioVideo
+  target:
+    - AppImage
+    - deb
+win:
+  target:
+    - nsis
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+mac:
+  category: public.app-category.video
+  target:
+    - dmg
+publish: null

@@ -87,7 +87,9 @@ function createCaptureTool(getConnection, onAnswer) {
     if (!modes.has(mode) || !contentTypes.has(content_type) ||
         [context, question].some(value => typeof value !== 'string' || value.length > core.MAX_QUESTION_CHARS))
       return { error: 'Choose valid analysis options and keep each text field within 1000 characters.' };
-    const connection = getConnection();
+    const connection = await getConnection();
+    if (s.controller.signal.aborted) return { error: 'Analysis canceled.' };
+    if (connection.error) return { error: connection.error };
     if (connection.baseUrl !== s.destination) return { error: 'Server address changed. Close and reopen capture.' };
     const result = await core.postScreenAnalysis({ ...connection, signal: s.controller.signal,
       editor: s.editor, version: s.version, mode, content_type,
@@ -103,21 +105,29 @@ function createCaptureTool(getConnection, onAnswer) {
   handle('destination', s => ({ destination: s.destination, editor: s.editor, version: s.version }),
     'Could not load Screen Analysis settings. Close and reopen the window.');
 
-  return function open() {
-    if (current) { current.win.show(); return; }
+  return async function open() {
+    if (!current) {
+      const connection = await getConnection();
+      if (connection.error) return { ok: false, message: connection.error };
+      if (!current) createWindow(connection);
+    }
+    current.win.show();
+    return { ok: true };
+  };
+
+  function createWindow({ baseUrl: destination, editor, version }) {
     const win = new BrowserWindow({ width: 760, height: 700, minWidth: 360, minHeight: 380,
-      title: 'Screen Analysis', autoHideMenuBar: true, backgroundColor: '#f5f7f4',
+      title: 'Screen Analysis', show: false, autoHideMenuBar: true, backgroundColor: '#f5f7f4',
       webPreferences: { partition: 'screen-capture', sandbox: true, contextIsolation: true, nodeIntegration: false, spellcheck: false,
         preload: path.join(__dirname, 'capture-preload.js') } });
     win.webContents.session.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
     win.webContents.session.setPermissionCheckHandler(() => false);
-    const { baseUrl: destination, editor, version } = getConnection();
     const s = { win, ids: new Map(), controller: new AbortController(), destination, editor, version };
     current = s;
     win.on('closed', () => { s.controller.abort(); s.ids.clear(); current = null; });
     win.webContents.on('render-process-gone', () => { if (!win.isDestroyed()) win.destroy(); });
     win.loadFile(page);
-  };
+  }
 }
 
 module.exports = { createCaptureTool };
