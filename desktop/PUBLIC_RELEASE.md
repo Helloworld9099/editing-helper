@@ -1,5 +1,7 @@
 # Editing Helper — public-release setup and safety checklist
 
+> **Want a no-login demo for judges instead?** Use the simpler [Judge Demo guide](JUDGE_DEMO.md). It needs a private Redis quota store and your existing Gemini service on Northflank, but no Supabase, email verification, or user accounts. The desktop automatically uses the publisher's HTTPS URL.
+
 The code supports **user-specific email-code sign-in, account authentication at FastAPI, Redis usage limits, and installer candidates**. Public access is **not live out of the box**. An ordinary user should never see or type the backend URL, a Gemini key or the old shared `COACH_ACCESS_TOKEN`.
 
 ## Architecture
