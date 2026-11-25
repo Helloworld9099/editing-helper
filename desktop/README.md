@@ -74,6 +74,12 @@ python launch.py --runner /path/to/llama-server --model /path/to/model.gguf -- \
   "$PWD/desktop/node_modules/.bin/electron" "$PWD/desktop"
 ```
 
+## Judge Demo (zero setup for judges)
+
+A **judge-demo** installer can launch directly without sign-in, server URL or shared access token. Build it with `PUBLIC_RELEASE_MODE=demo` and `PUBLIC_API_URL` set to your HTTPS Northflank demo service. The backend requires Redis-enforced IP and global quotas before any model call. No Gemini key is ever placed in Electron. This is separate from the full Supabase user-account release.
+
+See [JUDGE_DEMO.md](JUDGE_DEMO.md) for the required deployment variables, tests, and downloadable installer candidates.
+
 ## Connection modes
 
 **For your own developer checkout**: `cd desktop && npm start` uses your previously saved private Northflank connection. To edit its HTTPS URL or shared developer token, use `EDITING_HELPER_DEV_SETTINGS=1 npm start` (unpackaged only).
