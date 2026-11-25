@@ -178,7 +178,9 @@ function activeConnection(cfg, savedToken = '', env = process.env) {
 function managedConnection(releaseConfig, userAccessToken = '') {
   const candidate = releaseConfig && releaseConfig.apiBaseUrl;
   const { url, error } = validateBaseUrl(candidate);
-  if (error || !url || new URL(url).protocol !== 'https:') {
+  const parsed = url ? new URL(url) : null;
+  if (error || !parsed || parsed.protocol !== 'https:' || parsed.pathname !== '/' ||
+      (parsed.port && parsed.port !== '443')) {
     return { error: 'This release has no public service configured yet.' };
   }
   // Guest builds have only a public HTTPS endpoint; never bundle or send a shared secret.
