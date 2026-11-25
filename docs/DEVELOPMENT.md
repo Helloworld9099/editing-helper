@@ -1,123 +1,103 @@
-# Editing Helper — development and deployment
+# Development
 
-For installation and judge evaluation, start with the [project README](../README.md).
+The [project README](../README.md) covers installation. This guide covers source development and testing; see the [deployment guide](../desktop/JUDGE_DEMO.md) for hosting and installer builds.
 
-**Desktop app:** See [desktop/README.md](../desktop/README.md) to launch the floating frontend and test it without a model.
+## Architecture
 
-API for the Editing Helper desktop companion. It returns model-generated editing advice through Ollama, llama.cpp, Groq, or Google Gemini.
+Electron provides the desktop interface. FastAPI validates questions, retrieves editor-specific context from a SQLite FTS5 index, and calls the configured model provider. The hosted demo uses Gemini and Redis-backed request quotas. The application does not inspect or control editing software.
 
-## Start on Ubuntu
+| Component | Responsibility |
+| --- | --- |
+| `desktop/src/`, `desktop/renderer/` | Desktop windows, settings, chat, and HTTP client |
+| `app.py` | API, model providers, and request admission |
+| `demo_access.py`, `quota_limits.py` | Guest quotas and request-size protection |
+| `knowledge_rag.py`, `knowledge/sources/` | Search index and attributed knowledge |
+| `tests/`, `desktop/test/` | Backend and desktop regression tests |
+| `launch.py` | Optional local llama.cpp launcher |
 
-Requires Python 3.11+ (and its venv module), Ollama running on this computer, and the local `qwen3.5:4b` model. If you already ran that model successfully, reuse it. Otherwise, after installing Ollama, run `ollama pull qwen3.5:4b` once.
+See the [knowledge source policy](../knowledge/README.md) for the distinction between source-reviewed summaries and link-only references. Retrieval and automated tests do not establish real-world editing accuracy. The earlier local-model training prototype is not part of the hosted product and remains in Git history.
+
+## Desktop development
+
+Requires Node.js 22.12+ and npm. From the repository root:
 
 ```bash
-git clone https://github.com/Helloworld9099/editing-helper.git
-cd editing-helper
+cd desktop
+npm ci
+npm test
+npm run mock
+```
+
+In another terminal, from `desktop/`:
+
+```bash
+EDITING_HELPER_DEV_SETTINGS=1 npm start
+```
+
+Choose an editor, right-click the mascot, open Settings, and set the server address to `http://127.0.0.1:8001`. The mock returns labeled test replies without a model or access token. Use `/long`, `/slow`, and `/err` to exercise scrolling, the three-dot reply bubble, and error handling. While waiting, Send and Clear chat should be disabled, and the interface should remain responsive. Use `npm run start:normal` to diagnose floating-window issues. Developer connection fields are hidden in ordinary and packaged guest-demo modes.
+
+## Backend development
+
+Requires Python 3.11+. From the repository root:
+
+```bash
 python3 -m venv .venv
-.venv/bin/python -m pip install -r requirements.txt
-.venv/bin/python -m uvicorn app:app --host 127.0.0.1 --port 8000
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python knowledge_rag.py validate
+python knowledge_rag.py build
+python -m unittest discover -s tests -v
 ```
 
-If Ubuntu reports that `venv` is unavailable, install your distro's `python3-venv` package and retry. Leave the server terminal open while using the app. Stop it with Ctrl+C. Start it again with the last command from the project directory. If your old demo is already on port 8000, stop that instance first.
-
-## Frontend contract
-
-- `GET /health` is public on allowed hosts and returns `{"status":"ok"}` when the API process is up.
-- The desktop supports AI questions for Adobe Premiere Pro, DaVinci Resolve, Kdenlive, Shotcut, CapCut, ACDSee Luxea, Lightworks, Clipchamp, OpenShot, Canva, and iMovie. This selects answer context; it does not verify or automate instructions inside those programs.
-- `POST /v1/coach` takes `{"question":"..."}` as JSON. A successful reply is `{"answer":"..."}`. The desktop renders trusted-formatting-only Markdown from the returned answer.
-- A missing or invalid hosted access token returns `401`. Invalid input returns `422`, a busy coach returns `429`, an unavailable provider or model returns `503`, a model timeout returns `504`, and other upstream failures return `502`. Errors contain a `detail` field.
+For local Ollama development, start Ollama separately, download the configured model, and run the API on loopback:
 
 ```bash
-curl -fsS http://127.0.0.1:8000/health
-curl -fsS http://127.0.0.1:8000/v1/coach \
-  -H 'Content-Type: application/json' \
-  -d '{"question":"Reply with hello."}'
+ollama pull qwen3.5:4b
+COACH_RAG_ENABLED=1 python -m uvicorn app:app --host 127.0.0.1 --port 8000
 ```
 
-## Judge Demo (no login)
-
-The downloadable judge build connects automatically to your publisher-configured HTTPS FastAPI server. Judges choose an editor and ask questions; there are **no email codes, user accounts, access-token fields, or server URL settings**.
-
-Deploy a **separate** Northflank service with `COACH_AUTH_MODE=demo`, a private `GEMINI_API_KEY`, private `COACH_REDIS_URL`, and an explicitly configured `COACH_DEMO_GLOBAL_PER_DAY` limit. Redis checks per-IP and global limits before every Gemini call. Build the judge installer using the public `PUBLIC_API_URL`; local builds and the optional GitHub Actions workflow are documented in the [judge-demo guide](../desktop/JUDGE_DEMO.md). No API secret is bundled.
-
-See **[desktop/JUDGE_DEMO.md](../desktop/JUDGE_DEMO.md)** for the exact Northflank/Redis setup, testing commands, and installer steps. Guest access is publicly callable; monitor usage and stop the demo service after judging.
-
-## Private development versus judge installs
-
-The default private `COACH_AUTH_MODE=shared` still uses your existing `COACH_ACCESS_TOKEN`. To edit the saved Northflank address and token in your **unpackaged developer checkout**, launch `EDITING_HELPER_DEV_SETTINGS=1 npm start`. Ordinary settings and packaged judge builds never show those developer fields.
-
-## Editor knowledge base (RAG)
-
-When enabled, Editing Helper searches an **offline-built SQLite FTS5 index** containing **3,066 editor-specific records** across all 11 supported editors: 55 short, original source-reviewed summaries plus 3,011 navigation-only links to official manuals and public community sources. A supplemental source import added 1,689 links after removing 30 canonical URL duplicates. These are **not 3,066 verified tutorials**: link-only entries point to sources but do not establish any specific editing procedure. Records are organized by editor folder, topic category, software version and source type.
-
-The API preserves the original answer field and optionally returns a sources array with source-review level and topic. The desktop distinguishes "Source-reviewed notes" from "Further reading (links only)" with safe click-to-open HTTPS links. A source link means a relevant record was retrieved, **not** that all generated instructions have been physically verified.
-
-For local use, build the index and explicitly enable RAG before starting FastAPI:
-
-~~~bash
-python3 knowledge_rag.py validate
-python3 knowledge_rag.py stats
-python3 knowledge_rag.py build
-COACH_RAG_ENABLED=1 .venv/bin/python -m uvicorn app:app --host 127.0.0.1 --port 8000
-~~~
-
-Northflank builds and enables the index automatically through the root Dockerfile. No extra hosting/database accounts or embedding API are required. For adding documentation or permitted, reviewed forum summaries, see [knowledge/README.md](../knowledge/README.md). The index is generated and should not be committed.
-
-## Model and scope
-
-Change `COACH_MODEL` in the server's environment and restart to try a different already-installed local model. Local development defaults to Ollama and accepts `localhost` and `127.0.0.1`. Keep local services bound to loopback and leave `COACH_ACCESS_TOKEN` unset for token-free use. The offline launcher uses llama.cpp.
-
-## Deploy on Northflank
-
-Build the root `Dockerfile` in your Northflank service and expose container port `8000` as public HTTP. Use the service's HTTPS URL in the desktop app. [Northflank port configuration](https://northflank.com/docs/v1/application/network/configure-ports)
-
-Set the shared runtime environment variables for either hosted provider.
-
-| Variable | Value |
-| --- | --- |
-| `COACH_ACCESS_TOKEN` | A separate shared secret for desktop clients. Generate one with `python -c 'import secrets; print(secrets.token_urlsafe(32))'`. |
-| `COACH_ALLOWED_HOSTS` | Comma-separated hostnames without schemes or ports, including your Northflank hostname, any custom domain, and `127.0.0.1` for the probe below |
-
-For Google Gemini, use the following provider settings.
-
-| Variable | Value |
-| --- | --- |
-| `COACH_PROVIDER` | `gemini` |
-| `COACH_MODEL` | Optional Gemini model ID. Leave unset to use `gemini-2.5-flash`. |
-| `GEMINI_API_KEY` | Your Google Gemini API key, injected as a server secret |
-
-The backend calls Google's [native Gemini API](https://ai.google.dev/api/generate-content). Google lists `gemini-2.5-flash` as deprecated with API access limited to existing users until December 1, 2026. If your project lacks access, set `COACH_MODEL` to a supported text-generation model available to your project. [Gemini 2.5 Flash availability](https://ai.google.dev/gemini-api/docs/models/gemini-2.5-flash)
-
-For Groq, use the following provider settings.
-
-| Variable | Value |
-| --- | --- |
-| `COACH_PROVIDER` | `groq` |
-| `COACH_MODEL` | A [Groq chat model ID](https://console.groq.com/docs/api-reference#chat-create), for example `llama-3.3-70b-versatile` |
-| `GROQ_API_KEY` | Your Groq API key, injected as a server secret |
-
-In the default private `COACH_AUTH_MODE=shared`, Gemini, Groq, and the production container require `COACH_ACCESS_TOKEN` at startup. A separate judge-demo service instead uses `COACH_AUTH_MODE=demo` with required Redis usage limits and **no shared token**. For a hosted deployment outside Docker, `COACH_REQUIRE_AUTH=1` makes the token mandatory in private shared mode.
-
-[.env.example](../.env.example) shows the runtime settings. When running outside Northflank, export the settings in the environment that starts Uvicorn.
-
-Use a Northflank command health check to probe the loopback address. [Northflank health-check configuration](https://northflank.com/docs/v1/application/observe/configure-health-checks)
+Set the developer desktop server address to `http://127.0.0.1:8000`. For a compatible local GGUF and llama.cpp executable, use:
 
 ```bash
-python -c 'from urllib.request import urlopen; urlopen("http://127.0.0.1:8000/health", timeout=2).close()'
+python launch.py --runner /path/to/llama-server --model /path/to/model.gguf -- \
+  "$PWD/desktop/node_modules/.bin/electron" "$PWD/desktop"
 ```
 
-To connect Electron, set `EDITING_HELPER_API` to the HTTPS service URL and `EDITING_HELPER_ACCESS_TOKEN` to the server's `COACH_ACCESS_TOKEN` in the environment that launches Electron. See [developer setup](../desktop/README.md#connection-modes). Judge builds connect to the publisher's fixed HTTPS demo endpoint without user login or a shared client token.
+Hosted providers require server-side credentials and either shared-token mode or bounded guest-demo mode. See [.env.example](../.env.example). Never expose an unauthenticated local development server to the internet.
 
-## Backend tests
+## API contract
 
-```bash
-.venv/bin/python -m unittest discover -s tests -v
+`GET /health` reports liveness, not provider availability.
+
+`POST /v1/coach` accepts JSON:
+
+```json
+{"question":"How do I create a smooth zoom?","editor":"DaVinci Resolve","version":"20.1"}
 ```
 
-Tests use simulated Ollama, llama.cpp, Groq, and Gemini responses and cover access tokens, allowed hosts, public health checks, upstream errors, knowledge retrieval, and Gemini context injection.
+Editor and version are optional. The reply contains an `answer` string and, when available, `sources`. Questions are limited to 1,000 characters and POST bodies to 32 KiB, including streamed bodies. Private hosted deployments require a bearer token. Demo quotas are reserved after validation and admission, before the model call.
 
-## Local desktop build and training
+| Status | Meaning |
+| --- | --- |
+| 200 | Successful reply |
+| 401 | Invalid private access token |
+| 413 / 422 | Oversized or invalid input |
+| 429 | Backend busy or demo quota exhausted |
+| 502 | Failed or invalid upstream response |
+| 503 | Model, provider, or quota service unavailable |
+| 504 | Provider timeout |
 
-- Existing frontend clients still work. Optional `editor` and `version` fields let a new client include the user's selected editor without changing the response.
-- The default development runner above is Ollama. The offline release path uses [llama.cpp](https://github.com/ggml-org/llama.cpp) with the same API and a pinned GGUF, without an Ollama account. Review [Ollama's eligibility terms](https://ollama.com/terms) before using its services.
-- See [training/README.md](../training/README.md) to start a free-GPU smoke run, export and compare weights, and launch the actual desktop frontend. A manual GitHub Actions workflow now builds unsigned Linux, Windows, and macOS installer candidates after public service configuration. Code signing and real-device verification are still required.
+## Verification
+
+Run the backend suite above and `cd desktop && npm ci && npm test`. Optional renderer checks: install Playwright in a development virtual environment, run `python -m playwright install chromium`, then `python test/ui/ui_check.py` from `desktop/`. Renderer checks do not exercise native Electron windows.
+
+Before distributing, manually verify:
+
+- The welcome screen, reply indicator, chat-size presets, keyboard shortcuts, and quit menu.
+- The mascot stays the same size while dragging, the chat follows without stealing focus, and both remain on screen.
+- Editor and version settings persist and affect requests.
+- The public build exposes no developer connection fields and sends no private credentials.
+- Successful, slow, failed, and rate-limited requests display correctly; source links open only when selected.
+- The installer works on clean Windows and Linux machines.
+
+Model and Redis unit tests use simulated services. The [deployment guide](../desktop/JUDGE_DEMO.md) covers live and packaged verification.

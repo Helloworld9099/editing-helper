@@ -2,11 +2,16 @@ name: Editing Helper checks
 
 on:
   push:
-    branches: [main, feat/curated-rag-knowledge-20261124]
+    branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   backend:

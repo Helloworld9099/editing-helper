@@ -1,4 +1,5 @@
 """Guest demo tests; all Redis and Gemini traffic is simulated."""
+import asyncio
 import json
 import os
 import unittest
@@ -115,6 +116,45 @@ class DemoBackendTests(unittest.TestCase):
             with self.client(shared, self.model_ok) as client:
                 got = client.post("/v1/coach", json={"question": "Hello"})
                 self.assertEqual(got.status_code, expected)
+
+    def test_rejected_requests_do_not_spend_quota(self):
+        store = FakeRedis()
+        with self.client(store, self.model_ok) as client:
+            for invalid in ({}, {"question": " "}, {"question": "x" * 1001}):
+                self.assertEqual(client.post("/v1/coach", json=invalid).status_code, 422)
+            oversized = client.post("/v1/coach", json={"question": "x" * 40000})
+            self.assertEqual(oversized.status_code, 413)
+            self.assertEqual(store.calls, 0)
+            self.assertEqual(client.post("/v1/coach", json={"question": "Hello"}).status_code, 200)
+            self.assertEqual(store.calls, 1)
+
+    def test_busy_request_does_not_spend_quota(self):
+        async def scenario():
+            store = FakeRedis()
+            started = asyncio.Event()
+            release = asyncio.Event()
+
+            async def model(req):
+                started.set()
+                await release.wait()
+                return self.model_ok(req)
+
+            with patch.dict(os.environ, self.settings, clear=True):
+                api = create_app(quota_store=store, transport=httpx.MockTransport(model))
+            async with api.router.lifespan_context(api):
+                async with httpx.AsyncClient(transport=httpx.ASGITransport(app=api),
+                                             base_url="http://127.0.0.1") as client:
+                    first = asyncio.create_task(client.post("/v1/coach", json={"question": "Hello"}))
+                    try:
+                        await asyncio.wait_for(started.wait(), timeout=2)
+                        busy = await client.post("/v1/coach", json={"question": "Again"})
+                        self.assertEqual(busy.status_code, 429)
+                        self.assertEqual(store.calls, 1)
+                    finally:
+                        release.set()
+                        self.assertEqual((await first).status_code, 200)
+
+        asyncio.run(scenario())
 
     def test_demo_mode_requires_explicit_redis_budget_and_no_shared_secret(self):
         with patch.dict(os.environ, self.settings, clear=True):

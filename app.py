@@ -7,6 +7,7 @@ import sqlite3
 
 from knowledge_rag import SYSTEM_GUIDANCE, index_path, prompt_context, search_notes
 from demo_access import DemoAccess
+from quota_limits import CoachBodyLimitMiddleware
 from contextlib import asynccontextmanager
 from secrets import compare_digest
 
@@ -143,12 +144,7 @@ def create_app(*, model=None, timeout=60.0, transport=None, provider=None, quota
 
     bearer = HTTPBearer(auto_error=False)
 
-    async def require_access_token(request: Request, credentials=Depends(bearer)):
-        if auth_mode == "demo":
-            # No login, but the atomic Redis cap is mandatory before Gemini.
-            # Deliberately ignore any client-supplied credential in guest mode.
-            await demo_access.charge(request)
-            return
+    async def require_access_token(credentials=Depends(bearer)):
         if access_token and (
             credentials is None
             or not compare_digest(credentials.credentials.encode(), access_token.encode())
@@ -171,6 +167,7 @@ def create_app(*, model=None, timeout=60.0, transport=None, provider=None, quota
                     await managed_redis.aclose()
 
     api = FastAPI(title="Editing Helper API", lifespan=lifespan)
+    api.add_middleware(CoachBodyLimitMiddleware)
     api.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts)
 
     @api.get("/health")
@@ -179,12 +176,17 @@ def create_app(*, model=None, timeout=60.0, transport=None, provider=None, quota
         return {"status": "ok"}
 
     @api.post("/v1/coach", response_model=CoachReply, response_model_exclude_none=True,
-              dependencies=[Depends(require_access_token)] if access_token or auth_mode == "demo" else [])
+              dependencies=[Depends(require_access_token)] if access_token else [])
     async def coach(body: CoachRequest, request: Request):
         slot = request.app.state.slot
         if slot.locked():
-            raise HTTPException(429, "Coach is busy. Try again in a moment.")
+            raise HTTPException(429, "Coach is busy. Try again in a moment.",
+                                headers={"Retry-After": "1"})
         async with slot:
+            # Only validated, admitted guest requests consume the shared budget.
+            # Quota checks still fail closed before any upstream model request.
+            if demo_access is not None:
+                await demo_access.charge(request)
             try:
                 async with asyncio.timeout(timeout):
                     notes = []

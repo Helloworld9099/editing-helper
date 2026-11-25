@@ -1,70 +1,47 @@
-# Judge Demo: no login, no server settings, no shared key in Electron
+# Deployment and release
 
-This is a **controlled judge-demo distribution path**, not unrestricted free production access. The installed desktop connects to a publisher-selected HTTPS FastAPI server automatically; nobody enters a server URL, access token, Supabase account, or Gemini API key. **The Gemini API key remains on Northflank.**
+This guide is for maintainers. Judges install the prebuilt Windows or Linux package; see the [project README](../README.md).
 
-A guest can inspect the public endpoint or call it outside the desktop application, so the backend **must** enforce a finite, shared quota and your Gemini provider should also have cost controls. No frontend-only limit, install ID, or embedded shared token would provide effective protection.
+## Hosted demo
 
-## 1. Create a private Redis addon (required)
+Use a dedicated Northflank service built from the root [Dockerfile](../Dockerfile), with public HTTPS on container port 8000. The private development service and guest demo must have separate secret scopes.
 
-In your existing Northflank project, create an **Add-on → Redis** with public access **disabled**. Use the smallest suitable resources or an existing private Redis service. Connect its private URL to the demo backend using a Northflank linked secret group, and alias the connection URL as `COACH_REDIS_URL`.
+Create a private Redis add-on or use a reachable managed Redis instance. Set these **runtime** environment variables on the demo service:
 
-Alternatively, a managed Redis `rediss://...` URL works if your public Northflank service can reach it. Redis is **required**: guest requests fail closed when the service cannot connect, and quotas are atomic across multiple FastAPI instances.
-
-## 2. Deploy a separate demo FastAPI service on Northflank
-
-Do **not** change your existing private Editing Helper service or share its `COACH_ACCESS_TOKEN`.
-
-1. Create a separate **Combined Service** named `editing-helper-demo`.
-2. Connect `Helloworld9099/editing-helper`, branch `main`, build from the **root Dockerfile**.
-3. Expose **container port 8000** over a publicly accessible HTTPS hostname.
-4. Set these runtime environment variables on this *new* service:
-
-| Name | Example / meaning |
-|---|---|
+| Variable | Value |
+| --- | --- |
 | `COACH_PROVIDER` | `gemini` |
-| `COACH_MODEL` | Gemini text model already available to your Google project (optional) |
-| `GEMINI_API_KEY` | Your private Gemini key, set as a Northflank **secret**, never committed |
-| `COACH_AUTH_MODE` | **`demo`** |
-| `COACH_REDIS_URL` | Linked private Redis URL; set as a Northflank **secret** |
-| `COACH_DEMO_GLOBAL_PER_DAY` | **`100`** (REQUIRED explicit UTC-day cap, max 1000) |
-| `COACH_DEMO_GLOBAL_PER_MINUTE` | `20` (optional; default 20) |
-| `COACH_DEMO_IP_PER_MINUTE` | `8` (optional; default 8) |
-| `COACH_DEMO_IP_PER_DAY` | `60` (optional; default 60) |
-| `COACH_ALLOWED_HOSTS` | `your-demo-hostname.example,127.0.0.1` (**no** `https://`) |
+| `COACH_MODEL` | A supported Gemini text model available to the Google project |
+| `GEMINI_API_KEY` | Server-side Gemini secret |
+| `COACH_AUTH_MODE` | `demo` |
+| `COACH_REDIS_URL` | Private Redis connection URL |
+| `COACH_DEMO_GLOBAL_PER_DAY` | `100` (required; maximum 1000) |
+| `COACH_DEMO_GLOBAL_PER_MINUTE` | `20` |
+| `COACH_DEMO_IP_PER_MINUTE` | `8` |
+| `COACH_DEMO_IP_PER_DAY` | `60` |
+| `COACH_ALLOWED_HOSTS` | `p01--demo-backend--fbvcc7mvswr6.code.run,127.0.0.1` |
 
-**Leave `COACH_ACCESS_TOKEN` unset on this service.** Guest demo startup rejects it, preventing accidental reuse of your private credential. No `AUTH_SUPABASE_URL`, SMTP or email login is required.
+Do not inherit `COACH_ACCESS_TOKEN` in demo mode. Restrict private secret groups to the intended service. Keep provider keys and Redis credentials out of source, installers, and public logs. Rotate any previously committed credentials; deleting a file does not remove it from Git history.
 
-`COACH_DEMO_GLOBAL_PER_DAY` is mandatory even if the other limits are defaulted; the app refuses to start without it. The shared Redis quota reserves an IP/minute, IP/day, global/minute and global/day count together before contacting Gemini; failure to reach Redis returns 503, and exhausted quotas return 429. The quota resets with UTC-day/minute buckets (keys expire automatically). The demo limits the model response size, but request quotas **do not guarantee a precise monetary ceiling**. Monitor Gemini usage and configure Google provider cost/budget controls separately.
+The Docker build generates the knowledge index and runs the backend as a non-root user. The demo requires Redis and a finite daily limit, rejects requests when Redis is unavailable, and reserves minute/day quotas atomically before contacting the model. Per-IP counters use the server-observed address; users behind the same proxy may share an allowance. Daily quotas reset at UTC midnight. Request caps are not a monetary guarantee; configure provider budget controls and monitor usage.
 
-The IP counter uses the server-observed client address, not an arbitrary user-provided `X-Forwarded-For` header. Depending on Northflank's ingress, multiple judges may share the same observed proxy IP; if so, per-IP limits affect them together. The global caps still protect against unlimited requests. Test from outside your home network and adjust the IP limits carefully.
+For a separate private hosted service, use `COACH_AUTH_MODE=shared`, `COACH_ACCESS_TOKEN`, the appropriate allowed hosts, and provider secrets. See [.env.example](../.env.example). Do not expose Redis publicly.
 
-## 3. Verify the hosted demo endpoint
-
-Replace the placeholders with your actual public Northflank HTTPS hostname.
+### Verify the service
 
 ```bash
-curl -fsS https://YOUR-DEMO-SERVICE/health
-```
-
-Expected: `{"status":"ok"}`.
-
-Then try a guest request:
-
-```bash
-curl -i https://YOUR-DEMO-SERVICE/v1/coach \
+BASE=https://p01--demo-backend--fbvcc7mvswr6.code.run
+curl -fsS "$BASE/health"
+curl -i "$BASE/v1/coach" \
   -H 'Content-Type: application/json' \
   --data '{"question":"How do I create a smooth zoom?","editor":"Kdenlive"}'
 ```
 
-Expected: HTTP 200 and an `answer`. No Authorization header is required. Repeat calls beyond a **temporarily lowered** IP/minute cap to confirm HTTP 429, then restore appropriate limits before judging. Disconnect Redis briefly only in a controlled test: requests must fail with 503 without spending Gemini tokens. Do not run the service without quotas.
+Expect liveness JSON and HTTP 200 with an answer without an Authorization header. In an isolated test service with a low cap, verify HTTP 429 on quota exhaustion, HTTP 413 for oversized bodies, HTTP 422 for invalid input, and HTTP 503 during a Redis outage. Confirm rejected requests do not reach the provider.
 
-## 4. Build and distribute the desktop application
+## Build installers
 
-Judges should install the prebuilt Windows or Linux package from [GitHub Releases](https://github.com/Helloworld9099/editing-helper/releases). They do not need to follow the maintainer steps below.
-
-### Build locally (no GitHub Actions required)
-
-From the repository root, on Ubuntu with Node.js 22.12+:
+From the repository root on Ubuntu, with Python and Node.js 22.12+:
 
 ```bash
 export PUBLIC_API_URL=https://p01--demo-backend--fbvcc7mvswr6.code.run
@@ -75,7 +52,7 @@ npm test
 npx --yes electron-builder@26.18.0 --linux deb --x64 --publish never
 ```
 
-To build the Windows NSIS installer from the same Ubuntu checkout, with Docker installed, run from `desktop/` after generating the release config:
+For a Windows x64 NSIS installer from Linux, run in `desktop/` with Docker installed:
 
 ```bash
 sudo docker run --rm \
@@ -86,50 +63,20 @@ sudo docker run --rm \
   /bin/bash -c "npm ci && npx --yes electron-builder@26.18.0 --win nsis --x64 --publish never"
 ```
 
-On a Windows development machine, generate the same release configuration, install npm dependencies, then run `npx --yes electron-builder@26.18.0 --win nsis --x64 --publish never` in `desktop/`.
+On Windows, generate the same release configuration and run the Windows electron-builder command directly. The optional GitHub Actions installer workflow accepts an override through the repository variable `PUBLIC_API_URL`. Local builds do not consume Actions minutes.
 
-Installers appear in `desktop/dist/`. Publish the `.deb` and `.exe` as GitHub Release assets, not regular Git commits. A blockmap is unnecessary for a manual installer download. Include SHA-256 hashes and test on clean systems before sharing.
+For an unpackaged demo preview, generate the release config and run `EDITING_HELPER_PUBLIC_PREVIEW=1 npm start` in `desktop/`. Restore the checked-in placeholder after testing with `git restore desktop/src/release-config.json` from the root. The generated configuration contains only an HTTPS origin and guest authentication mode.
 
-### Optional GitHub Actions build
+## Release verification
 
-Run **Build judge demo installers** on `main`. The workflow defaults to the public demo hostname above; the repository variable `PUBLIC_API_URL` can override it. The workflow produces unsigned Linux, Windows and macOS candidates. It is optional and consumes the account's Actions allowance.
+Installers appear in `desktop/dist/`. Publish the Windows `.exe` and Linux `.deb` as GitHub Release assets, not source files. Include [SHA-256 checksums for the supplied v0.1.0 builds](../docs/releases/v0.1.0/SHA256SUMS.txt); regenerate the checksum file after rebuilding. The optional blockmap is not needed for manual installation.
 
-Never bundle the provider key, Redis URL, or private access token. The public HTTPS origin is the only deployment setting needed in the installer.
+The supplied Linux installer was inspected against source commit `39bc9650d407ad3f25b32cd85313bed5404cc77e`; all 15 packaged application and renderer source files matched and its public demo URL was confirmed. The supplied Windows file is an unsigned NSIS installer; its payload and installation behavior were not independently verified. Both supplied installers predate subsequent welcome-screen changes. Inspection is not a malware scan or runtime acceptance test.
 
-## 5. Test a no-login desktop preview locally on Ubuntu
+Before publishing:
 
-From the repository root:
-
-```bash
-git switch main
-git pull origin main
-export PUBLIC_API_URL=https://YOUR-DEMO-SERVICE
-python3 .github/scripts/write_release_config.py
-cd desktop
-npm ci
-EDITING_HELPER_PUBLIC_PREVIEW=1 npm start
-```
-
-The normal app opens without an account prompt. Choose the editor and ask a question. The chat should receive an answer without server settings. The app automatically uses `PUBLIC_API_URL`.
-
-**Important:** The preview script edits `desktop/src/release-config.json` locally, which is a tracked **public, nonsecret** file. To restore the safe checked-in placeholder after testing, return to the repository root and run:
-
-```bash
-git restore desktop/src/release-config.json
-```
-
-Don't commit a locally generated config unnecessarily.
-
-## 6. Release gate: verify before handing judges a download
-
-- Run `python3 -m unittest discover -s tests -v` with dependencies from `requirements.txt`.
-- Run `cd desktop && npm ci && npm test`.
-- Test a real guest question through FastAPI with no Authorization header.
-- Confirm HTTP 429 when quotas are reached, and 503 when Redis is unavailable.
-- Open the installer on a clean Ubuntu/Windows computer (and macOS if distributing a macOS build) and check **no login, no URL, no token** is requested.
-- Inspect packaged files to ensure no `GEMINI_API_KEY`, `COACH_ACCESS_TOKEN` or `COACH_REDIS_URL` appears.
-- Verify the editor knowledge links load and answers still show only `AI guidance` when unsourced.
-- Provide a short judge README (startup, supported editors, example prompt, limitations), and arrange a trusted way to share the installer.
-- Monitor usage during judging. When the evaluation finishes, stop the separate demo service entirely to disable anonymous calls.
-
-Guest mode is simpler for judges, but cannot prevent determined abuse; stop the demo server after evaluation.
+- Run the [development tests](../docs/DEVELOPMENT.md) and inspect packaged configuration for accidental credentials.
+- Test clean Windows and Linux installations, automatic demo connection, normal use, and complete exit.
+- Verify that downloaded assets match the published checksums.
+- Investigate actual malware detections. Unsigned installers may trigger publisher or reputation warnings; never instruct users to disable security software. Signing and platform verification are necessary for a broader production release.
+- Verify public download access and the live demo outside the development environment. Monitor usage and keep the demo available throughout judging; stop the guest service when evaluation ends.
