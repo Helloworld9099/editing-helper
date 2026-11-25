@@ -22,7 +22,7 @@ STUB = """
   window.__saveResult = {ok:true, restartNeeded:false};
   window.coach = {
     getConfig: async () => cfg,
-    authStatus: async () => ({publicMode:cfg.publicMode===true, configured:true, signedIn:false}),
+    authStatus: async () => ({publicMode:cfg.publicMode===true && cfg.authentication!=='guest-demo', configured:true, signedIn:false}),
     requestSignInCode: async (email) => { calls.push(['sendCode',email]); return {ok:true}; },
     verifySignInCode: async (email,code) => { calls.push(['verifyCode',email,code]); return {ok:true,email}; },
     signOut: async () => { calls.push(['signOut']); return {ok:true}; },
@@ -288,6 +288,11 @@ with sync_playwright() as pw:
                         query="?mode=settings", size=(460, 650))
     check("settings: unsafe Linux fallback cannot save a token",
           p.is_disabled("#accessToken") and "keyring unavailable" in p.inner_text("#tokenHint").lower())
+    p, errs = open_page("panel.html", cfg={"publicMode": True, "authentication": "guest-demo"})
+    check("guest-demo: panel has no sign-in prompt or server credentials",
+          not errs and not p.is_visible("#auth") and not p.locator("#accessToken").count()
+          and not p.locator("#url").count(), errs)
+
     p, errs = open_page("signin.html", cfg={"publicMode": True}, size=(440, 480))
     check("signin: no service secrets in sign-in form",
           p.is_visible("#email") and not p.locator("#accessToken").count()
