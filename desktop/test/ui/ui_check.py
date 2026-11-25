@@ -76,8 +76,10 @@ with sync_playwright() as pw:
     minimum, _ = open_page("panel.html", size=(300, 300))
     check("panel: minimum window keeps Send visible",
           minimum.evaluate("(() => {const s=document.querySelector('#send').getBoundingClientRect(); return document.documentElement.scrollWidth <= innerWidth && s.bottom <= innerHeight;})()"))
-    check("panel: welcome note mentions app and says not verified",
-          "DaVinci Resolve 20.1" in p.inner_text("#log") and "Related references" in p.inner_text("#log"))
+    check("panel: welcome note contains only heading and selected editor",
+          p.locator(".msg.note h2").inner_text() == "Good edits start here."
+          and p.locator(".msg.note .body").inner_text() == "Ask about DaVinci Resolve 20.1."
+          and p.locator(".note-mark, #examples").count() == 0)
     p.evaluate("window.__selectEditor('Kdenlive', '26.08')")
     p.wait_for_timeout(50)
     check("panel: editor label refreshes after Settings change without reopening",
@@ -86,14 +88,29 @@ with sync_playwright() as pw:
     pb, _ = open_page("panel.html", cfg={"editor": "", "editorVersion": ""})
     check("panel: works with no editing app set (generic welcome)",
           "DaVinci Resolve" not in pb.inner_text("#log") and "Choose your editor" in pb.inner_text("#log"))
-    check("panel: empty question disables Send", p.is_disabled("#send"))
-    check("panel: shows suggested questions", p.locator("#examples button").count() == 2)
+    check("panel: empty question disables Send and Clear chat", p.is_disabled("#send") and p.is_disabled("#clear"))
+    p.fill("#input", "   ")
+    check("panel: whitespace does not enable Send or Clear chat", p.is_disabled("#send") and p.is_disabled("#clear"))
     p.fill("#input", "how do I cut a clip?")
-    check("panel: typed question enables Send and counter updates", not p.is_disabled("#send") and p.inner_text("#count").startswith("20 /"))
+    check("panel: typed question enables Send and Clear chat and updates counter",
+          not p.is_disabled("#send") and not p.is_disabled("#clear") and p.inner_text("#count").startswith("20 /"))
     p.press("#input", "Enter")
     check("panel: Enter sends the question", p.evaluate("window.__calls.filter(c=>c[0]==='ask')") == [["ask", "how do I cut a clip?"]])
-    check("panel: waiting state shown, send disabled", p.is_disabled("#send") and p.inner_text("#status") == "Thinking")
-    p.fill("#input", "second question"); p.press("#input", "Enter"); p.click("#send", force=True)
+    check("panel: welcome disappears and three-dot bubble appears after send",
+          p.locator(".msg.note").count() == 0 and p.locator(".msg.typing .typing-dot").count() == 3
+          and p.locator("#log > .msg:last-child").get_attribute("class") == "msg coach typing"
+          and p.is_disabled("#send") and p.is_disabled("#clear"))
+    check("panel: typing dots have staggered animations",
+          p.locator(".typing-dot").evaluate_all("(dots) => dots.every(d => getComputedStyle(d).animationName === 'typing-bounce') && new Set(dots.map(d => getComputedStyle(d).animationDelay)).size === 3"))
+    p.emulate_media(reduced_motion="reduce")
+    check("panel: reduced motion disables typing animation",
+          p.locator(".typing-dot").evaluate_all("(dots) => dots.every(d => getComputedStyle(d).animationName === 'none')"))
+    p.emulate_media(reduced_motion="no-preference")
+    p.evaluate("window.__selectEditor('Kdenlive', '26.08')")
+    p.wait_for_timeout(50)
+    check("panel: editor settings changes do not bring back welcome mid-conversation", p.locator(".msg.note").count() == 0)
+    p.fill("#input", "second question"); p.press("#input", "Enter")
+    check("panel: Clear chat stays disabled during request even with a draft", p.is_disabled("#clear"))
     check("panel: duplicate submits blocked while waiting", names(p).count("ask") == 1)
     p.evaluate("document.activeElement && document.activeElement.blur()")
     p.evaluate("window.__resolveAsk({ok:true, answer:'<img src=x onerror=\"window.__pwned=1\">Press C.\\nThen click.'})")
@@ -102,6 +119,10 @@ with sync_playwright() as pw:
           p.locator("#log img, #log script").count() == 0 and p.evaluate("window.__pwned") is None and "Press C." in p.inner_text("#log"))
     check("panel: coach reply uses Markdown layout",
           p.evaluate("getComputedStyle(document.querySelector('.msg.coach .body')).whiteSpace") == "normal")
+    check("panel: reply does not steal focus", p.evaluate("document.activeElement.id") != "input")
+    check("panel: draft typed during wait is preserved, controls re-enabled, typing bubble removed",
+          not p.is_disabled("#send") and not p.is_disabled("#clear") and p.input_value("#input") == "second question"
+          and p.locator(".msg.typing, .msg.note").count() == 0)
     p.fill("#input", "show formatting"); p.press("#input", "Enter")
     p.evaluate("window.__resolveAsk({ok:true, answer:'## Method 1\\n\\n**Bold instruction**\\n\\n1. First step\\n2. Second step\\n\\n`code`'})")
     p.wait_for_timeout(150)
@@ -115,9 +136,6 @@ with sync_playwright() as pw:
     check("panel: no-documentation footer only says AI guidance",
           p.locator(".msg.coach .source-foot").last.inner_text().strip() == "AI guidance")
 
-    check("panel: reply does not steal focus", p.evaluate("document.activeElement.id") != "input")
-    check("panel: draft typed during wait is preserved and Send re-enabled",
-          not p.is_disabled("#send") and p.input_value("#input") == "second question" and p.inner_text("#status") == "")
     p.fill("#input", "how do I use Transform?"); p.press("#input", "Enter")
     p.evaluate("""window.__resolveAsk({ok:true,answer:'Use Transform [1].',sources:[{
       title:'Kdenlive Transform Manual', url:'https://docs.kdenlive.org/en/transform.html',
@@ -137,7 +155,8 @@ with sync_playwright() as pw:
     p.evaluate("window.__resolveAsk({ok:false, kind:'offline', message:\"Can't reach the coach server at http://127.0.0.1:8000.\"})")
     p.wait_for_timeout(150)
     check("panel: error shown as alert", p.locator(".msg.error[role=alert]").count() == 1 and "Can't reach" in p.inner_text(".msg.error"))
-    check("panel: question restored after error", p.input_value("#input") == "next")
+    check("panel: question restored after error, typing bubble removed",
+          p.input_value("#input") == "next" and p.locator(".msg.typing").count() == 0 and not p.is_disabled("#clear"))
     p.press("#input", "Escape")
     check("panel: Escape collapses", "closePanel" in names(p))
     p.evaluate("window.__emit('panel:shown')"); p.wait_for_timeout(50)
@@ -151,12 +170,16 @@ with sync_playwright() as pw:
     check("panel: long answers scroll inside the log",
           p.evaluate("(() => {const l=document.getElementById('log'); return l.scrollHeight > l.clientHeight && getComputedStyle(l).overflowY === 'auto'})()"))
     p.screenshot(path=str(OUT / "panel_long.png"))
+    check("panel: Clear chat disabled with empty draft even after replies", p.is_disabled("#clear"))
+    p.fill("#input", "draft")
+    check("panel: Clear chat enabled with a nonempty draft", not p.is_disabled("#clear"))
     p.click("#clear")
-    check("panel: Clear chat restores empty state", p.locator(".msg.user, .msg.coach, .msg.error").count() == 0
-          and p.is_visible("#examples") and p.is_disabled("#send"))
-    p.click("#examples button:first-child")
-    check("panel: example fills the draft without sending", p.input_value("#input") == "How do I make a camera shake?"
-          and not p.is_disabled("#send"))
+    p.wait_for_timeout(50)
+    check("panel: Clear chat clears draft and restores selected-editor welcome",
+          p.locator(".msg.user, .msg.coach, .msg.error").count() == 0
+          and p.locator(".msg.note .body").inner_text() == "Ask about Kdenlive 26.08."
+          and p.input_value("#input") == "" and p.is_disabled("#send") and p.is_disabled("#clear")
+          and "clearSources" in names(p))
 
     box = p.locator("#resize").bounding_box()
     x, y = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2

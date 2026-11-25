@@ -35,7 +35,7 @@ Settings -> Server address `http://127.0.0.1:8001` -> Save. Open the panel and t
 | You type            | You should see                                                        |
 |---------------------|-----------------------------------------------------------------------|
 | `hello`             | a MOCK reply showing the selected editor and echoing your text                                        |
-| `/slow`             | "Thinking..." for ~8s, pet's eyes glance, Send disabled, UI responsive |
+| `/slow`             | A three-dot reply bubble for ~8s, pet's eyes glance, Send and Clear chat disabled, UI responsive |
 | `/err`              | red message: HTTP 500 + "mock: ollama unavailable"; question restored |
 | `/bad` `/noanswer`  | red "wasn't valid JSON" / "no text answer field"                      |
 | `/html`             | unsafe HTML is sanitized; no script executes and no image is injected |

@@ -4,21 +4,21 @@
   const log = document.getElementById('log');
   const input = document.getElementById('input');
   const sendBtn = document.getElementById('send');
-  const status = document.getElementById('status');
-  const examples = document.getElementById('examples');
   const counter = document.getElementById('count');
   const clearBtn = document.getElementById('clear');
   const MAX_CHARS = 1000;
   let busy = false;
   let messageCount = 0;
+  let typingBubble = null;
 
   function syncControls() {
     const length = input.value.length;
     counter.textContent = length + ' / ' + MAX_CHARS;
     counter.classList.toggle('near-limit', length >= MAX_CHARS);
     sendBtn.disabled = busy || !input.value.trim() || length > MAX_CHARS;
-    clearBtn.disabled = busy || messageCount === 0;
+    clearBtn.disabled = busy || !input.value.trim();
     log.classList.toggle('empty', messageCount === 0);
+    if (messageCount > 0) log.querySelector('.note')?.remove();
   }
 
   // Only AI replies use sanitized Markdown; user input and errors remain literal text.
@@ -32,13 +32,8 @@
       el.appendChild(w);
     }
     if (kind === 'note') {
-      const mark = document.createElement('span');
-      mark.className = 'note-mark';
-      mark.setAttribute('aria-hidden', 'true');
-      mark.textContent = '✦';
       const title = document.createElement('h2');
       title.textContent = 'Good edits start here.';
-      el.appendChild(mark);
       el.appendChild(title);
     }
     const body = document.createElement('div');
@@ -85,7 +80,6 @@
     log.appendChild(el);
     if (kind !== 'note') {
       messageCount++;
-      examples.hidden = true;
       syncControls();
     }
     if (kind === 'coach') el.scrollIntoView({ block: 'start' });   // long answers open at the top
@@ -94,8 +88,23 @@
 
   function setBusy(b) {
     busy = b;
-    status.textContent = b ? 'Thinking' : '';
-    status.classList.toggle('busy', b);
+    if (b && !typingBubble) {
+      typingBubble = document.createElement('div');
+      typingBubble.className = 'msg coach typing';
+      typingBubble.setAttribute('role', 'status');
+      typingBubble.setAttribute('aria-label', 'Coach is preparing a reply');
+      for (let i = 0; i < 3; i++) {
+        const dot = document.createElement('span');
+        dot.className = 'typing-dot';
+        dot.setAttribute('aria-hidden', 'true');
+        typingBubble.appendChild(dot);
+      }
+      log.appendChild(typingBubble);
+      log.scrollTop = log.scrollHeight;
+    } else if (!b && typingBubble) {
+      typingBubble.remove();
+      typingBubble = null;
+    }
     syncControls();
   }
 
@@ -107,10 +116,9 @@
       addMessage('error', null, `That question is too long (limit ${MAX_CHARS} characters).`);
       return;
     }
-    setBusy(true);
     input.value = '';
-    syncControls();
     addMessage('user', 'You', q);
+    setBusy(true);
     let result;
     try {
       result = await api.ask(q);            // network happens in the main process; UI stays live
@@ -158,19 +166,11 @@
 
   sendBtn.addEventListener('click', submit);
   input.addEventListener('input', syncControls);
-  examples.querySelectorAll('[data-prompt]').forEach((button) => {
-    button.addEventListener('click', () => {
-      input.value = button.dataset.prompt;
-      syncControls();
-      input.focus();
-    });
-  });
   clearBtn.addEventListener('click', () => {
-    if (busy || messageCount === 0) return;
+    if (busy || !input.value.trim()) return;
     log.replaceChildren();
     api.clearSources?.();
     messageCount = 0;
-    examples.hidden = false;
     input.value = '';
     syncControls();
     void showEditor();
@@ -186,8 +186,9 @@
     let cfg;
     try { cfg = await api.getConfig(); } catch { /* show the generic guidance */ }
     const app = cfg && cfg.editor ? cfg.editor + (cfg.editorVersion ? ' ' + cfg.editorVersion : '') : '';
+    if (messageCount > 0 || busy) return;
     const prior = log.querySelector('.note');
-    const note = app ? `Ask about ${app}. Related references appear when available; other advice is unverified.` : 'Choose your editor in Settings.';
+    const note = app ? `Ask about ${app}.` : 'Choose your editor in Settings.';
     if (prior) prior.querySelector('.body').textContent = note;
     else addMessage('note', null, note);
   }
