@@ -2,9 +2,21 @@ name: Build judge demo installers
 
 on:
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish a new versioned GitHub Release after all checks pass
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+    paths: ['.github/workflows/build-public-installers.yml']
 
 permissions:
   contents: read
+
+concurrency:
+  group: public-installers-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -14,11 +26,12 @@ jobs:
         include:
           - os: ubuntu-latest
             target: linux
+            format: deb
           - os: windows-latest
             target: win
-          - os: macos-latest
-            target: mac
+            format: nsis
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
     env:
       PUBLIC_API_URL: ${{ vars.PUBLIC_API_URL || 'https://p01--demo-backend--fbvcc7mvswr6.code.run' }}
     steps:
@@ -29,7 +42,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Configure public service (no shared token)
+      - name: Configure public service
         run: python .github/scripts/write_release_config.py
       - name: Install dependencies
         working-directory: desktop
@@ -37,16 +50,139 @@ jobs:
       - name: Unit tests
         working-directory: desktop
         run: npm test
-      - name: Build installer candidate
+      - name: Build installer
         working-directory: desktop
-        run: npx --yes electron-builder@26.18.0 --${{ matrix.target }} --x64 --publish never
+        run: npx --yes electron-builder@26.18.0 --${{ matrix.target }} ${{ matrix.format }} --x64 --publish never
+      - name: Install and smoke-test Linux package
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          package=(desktop/dist/*.deb)
+          test "${#package[@]}" -eq 1
+          test -f "${package[0]}"
+          sudo apt-get update -qq
+          sudo apt-get install -y xvfb "./${package[0]}"
+          dpkg-query -W editing-coach
+          executable="/opt/Editing Helper/editing-coach"
+          test -x "$executable"
+          export XDG_CONFIG_HOME="$(mktemp -d)"
+          status=0
+          timeout --kill-after=5s 15s xvfb-run -a "$executable" || status=$?
+          if [ "$status" -ne 124 ]; then
+            echo "Installed application did not stay running: exit $status" >&2
+            exit 1
+          fi
+      - name: Install and smoke-test Windows package
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $installers = @(Get-ChildItem desktop/dist -Filter '*.exe' -File)
+          if ($installers.Count -ne 1) { throw 'Expected exactly one installer' }
+          $target = Join-Path $env:RUNNER_TEMP 'editing-helper-smoke'
+          $setup = Start-Process -FilePath $installers[0].FullName -ArgumentList '/S', "/D=$target" -Wait -PassThru
+          if ($setup.ExitCode -ne 0) { throw "Installer exited $($setup.ExitCode)" }
+          $exe = Join-Path $target 'Editing Helper.exe'
+          if (-not (Test-Path $exe)) { throw 'Installed application missing' }
+          $process = Start-Process -FilePath $exe -PassThru
+          try {
+            Start-Sleep -Seconds 12
+            $process.Refresh()
+            if ($process.HasExited) { throw "Application exited $($process.ExitCode)" }
+          } finally {
+            if (-not $process.HasExited) {
+              taskkill.exe /PID $process.Id /T /F | Out-Null
+            }
+          }
       - uses: actions/upload-artifact@v4
         with:
-          name: editing-helper-judge-demo-${{ matrix.target }}-unsigned
+          name: editing-helper-${{ matrix.target }}-unsigned
           path: |
-            desktop/dist/*.AppImage
             desktop/dist/*.deb
             desktop/dist/*.exe
-            desktop/dist/*.dmg
           if-no-files-found: error
           retention-days: 14
+
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements.txt
+      - run: python knowledge_rag.py validate
+      - run: python knowledge_rag.py build
+      - run: python -m unittest discover -s tests -v
+      - run: docker build -t editing-helper-release-check .
+
+  publish:
+    if: github.ref == 'refs/heads/main' && ((github.event_name == 'workflow_dispatch' && inputs.publish) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[publish-demo]')))
+    needs: [build, backend]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PUBLIC_API_URL: ${{ vars.PUBLIC_API_URL || 'https://p01--demo-backend--fbvcc7mvswr6.code.run' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: editing-helper-*-unsigned
+          path: release-assets
+          merge-multiple: true
+      - name: Verify hosted demo
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --max-time 20 "$PUBLIC_API_URL/health" | jq -e '.status == "ok"'
+          curl --fail --silent --show-error --max-time 90 "$PUBLIC_API_URL/v1/coach" \
+            -H 'Content-Type: application/json' \
+            --data '{"question":"How do I create a smooth zoom?","editor":"Kdenlive"}' | jq -e '.answer | type == "string" and length > 0'
+      - name: Publish verified release and synchronize checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./desktop/package.json').version")"
+          tag="v$version"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists; increment the version instead of replacing published installers." >&2
+            exit 1
+          fi
+          cd release-assets
+          windows=(*.exe)
+          linux=(*.deb)
+          test "${#windows[@]}" -eq 1
+          test "${#linux[@]}" -eq 1
+          test -f "${windows[0]}"
+          test -f "${linux[0]}"
+          sha256sum "${linux[0]}" "${windows[0]}" > SHA256SUMS.txt
+          cd ..
+          checksum="docs/releases/$tag/SHA256SUMS.txt"
+          mkdir -p "$(dirname "$checksum")"
+          cp release-assets/SHA256SUMS.txt "$checksum"
+          git add "$checksum"
+          if ! git diff --cached --quiet; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m "Record installer checksums for $tag"
+            git push origin HEAD:main
+          fi
+          target="$(git rev-parse HEAD)"
+          {
+            echo 'Windows x64 and Ubuntu/Debian amd64 unsigned judge-demo installers.'
+            echo 'Includes automated install/startup smoke checks and a hosted API smoke check.'
+            echo 'Full interactive editing accuracy and clean physical-machine acceptance still require manual testing.'
+            echo 'See README.md for installation. Do not bypass malware detections.'
+            echo
+            echo 'SHA-256 checksums:'
+            echo '~~~text'
+            cat release-assets/SHA256SUMS.txt
+            echo '~~~'
+          } > "$RUNNER_TEMP/release-notes.md"
+          gh release create "$tag" --target "$target" --title "Editing Helper $tag — Judge Demo" \
+            --notes-file "$RUNNER_TEMP/release-notes.md" release-assets/*.exe release-assets/*.deb release-assets/SHA256SUMS.txt

@@ -205,7 +205,7 @@ class KnowledgeTests(unittest.TestCase):
     def test_bad_new_index_does_not_destroy_old_index(self):
         before = self.db.read_bytes()
         with tempfile.TemporaryDirectory() as folder:
-            with self.assertRaisesRegex(ValueError, "No reviewed"):
+            with self.assertRaisesRegex(ValueError, "No indexed knowledge entries"):
                 build_index(Path(folder), self.db)
         self.assertEqual(self.db.read_bytes(), before)
 

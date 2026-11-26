@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const vm = require('node:vm');
+const { createRequire } = require('node:module');
 const core = require('../src/core');
 
 test('pet remains 80px and the open chat follows during drag without resizing', async (t) => {
@@ -58,7 +59,7 @@ test('pet remains 80px and the open chat follows during drag without resizing', 
   ipc.handle = () => {};
   const app = new EventEmitter();
   const ready = Promise.resolve();
-  Object.assign(app, { commandLine: { appendSwitch() {} }, setPath() {}, getPath: () => dir,
+  Object.assign(app, { isPackaged: true, commandLine: { appendSwitch() {} }, setPath() {}, getPath: () => dir,
     requestSingleInstanceLock: () => true, whenReady: () => ready });
   const screen = new EventEmitter();
   const display = { workArea: { x: 0, y: 0, width: 1920, height: 1200 } };
@@ -70,8 +71,10 @@ test('pet remains 80px and the open chat follows during drag without resizing', 
     buildFromTemplate(items) { contextMenu = items; return { popup() {} }; },
   }, session: { defaultSession: { setPermissionRequestHandler() {} } } };
   const file = path.join(__dirname, '../src/main.js');
+  const requireFromMain = createRequire(file);
   vm.runInNewContext(fs.readFileSync(file, 'utf8'), { __dirname: path.dirname(file), process,
-    require: (id) => id === 'electron' ? electron : id === './core' ? core : require(id) });
+    setTimeout, clearTimeout,
+    require: (id) => id === 'electron' ? electron : requireFromMain(id) });
   await ready;
   const [pet, chat] = windows;
   const emit = (win, name, ...args) => ipc.emit(name, { sender: win.webContents }, ...args);
