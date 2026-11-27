@@ -144,6 +144,17 @@ footer {
 .clear:disabled { color: #8b9b95; opacity: .56; cursor: not-allowed; }
 .clear:not(:disabled):hover { text-decoration: underline; }
 .composer { display: flex; align-items: stretch; gap: 7px; }
+.attachment {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 7px;
+  padding: 5px; border: 1px solid #cfe3d9; border-radius: 8px; background: #fffefa;
+}
+.attachment[hidden] { display: none; }
+.attachment video { width: 96px; height: 50px; background: #183a34; border-radius: 5px; }
+.attachment-info { flex: 1; min-width: 0; font-size: 11px; }
+.attachment-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#remove-video { padding: 2px 7px; font-size: 17px; }
+#attach-video { display: grid; place-items: center; padding: 7px; align-self: flex-end; }
+#attach-video:disabled, #remove-video:disabled { opacity: .55; cursor: not-allowed; }
 textarea {
   flex: 1; min-width: 0; width: 100%; min-height: 69px;
   font: inherit; font-size: 13px; line-height: 1.45; color: var(--text);

@@ -6,8 +6,17 @@
   const sendBtn = document.getElementById('send');
   const counter = document.getElementById('count');
   const clearBtn = document.getElementById('clear');
+  const attachBtn = document.getElementById('attach-video');
+  const removeBtn = document.getElementById('remove-video');
+  const picker = document.getElementById('video-file');
+  const attachment = document.getElementById('attachment');
+  const preview = document.getElementById('preview');
+  const filename = document.getElementById('filename');
+  const clipDetail = document.getElementById('clip-detail');
   const MAX_CHARS = 1000;
+  const MAX_VIDEO_BYTES = 10 * 1024 * 1024;
   let busy = false;
+  let clip = null;
   let messageCount = 0;
   let typingBubble = null;
 
@@ -15,10 +24,47 @@
     const length = input.value.length;
     counter.textContent = length + ' / ' + MAX_CHARS;
     counter.classList.toggle('near-limit', length >= MAX_CHARS);
-    sendBtn.disabled = busy || !input.value.trim() || length > MAX_CHARS;
-    clearBtn.disabled = busy || !input.value.trim();
+    const hasDraft = Boolean(input.value.trim() || clip);
+    sendBtn.disabled = busy || !hasDraft || length > MAX_CHARS;
+    clearBtn.disabled = busy || !hasDraft;
+    attachBtn.disabled = busy;
+    removeBtn.disabled = busy;
     log.classList.toggle('empty', messageCount === 0);
     if (messageCount > 0) log.querySelector('.note')?.remove();
+  }
+
+  function removeClip() {
+    if (!clip) return;
+    URL.revokeObjectURL(clip.url);
+    clip = null;
+    preview.removeAttribute('src');
+    preview.load();
+    attachment.hidden = true;
+    syncControls();
+  }
+
+  function selectClip() {
+    const file = picker.files[0];
+    picker.value = '';
+    if (busy || !file) return;
+    const extension = file.name.split('.').pop().toLowerCase();
+    if (!/\.(mp4|mov|webm)$/i.test(file.name)) {
+      addMessage('error', null, 'Choose an MP4, MOV or WebM video.');
+      return;
+    }
+    if (!file.size || file.size > MAX_VIDEO_BYTES) {
+      addMessage('error', null, 'Choose a video up to 10 MiB that is between 1 and 5 seconds long.');
+      return;
+    }
+    removeClip();
+    clip = { file, extension, url: URL.createObjectURL(file) };
+    filename.textContent = file.name;
+    filename.title = file.name;
+    clipDetail.textContent = '1–5 second reference';
+    preview.hidden = false;
+    attachment.hidden = false;
+    preview.src = clip.url;
+    syncControls();
   }
 
   // Only AI replies use sanitized Markdown; user input and errors remain literal text.
@@ -111,22 +157,27 @@
   async function submit() {
     if (busy) return;                       // no duplicate submits
     const q = input.value.trim();
-    if (!q) return;
+    if (!q && !clip) return;
     if (q.length > MAX_CHARS) {
       addMessage('error', null, `That question is too long (limit ${MAX_CHARS} characters).`);
       return;
     }
     input.value = '';
-    addMessage('user', 'You', q);
+    const reference = clip;
+    const label = reference ? reference.file.name : '';
+    addMessage('user', 'You', [q, label].filter(Boolean).join('\n'));
     setBusy(true);
     let result;
     try {
-      result = await api.ask(q);            // network happens in the main process; UI stays live
+      result = reference
+        ? await api.analyzeVideo(q, reference.extension, await reference.file.arrayBuffer())
+        : await api.ask(q);
     } catch {
       result = { ok: false, message: 'Something went wrong inside the app. Try again.' };
     }
     setBusy(false);
     if (result && result.ok) {
+      if (reference) removeClip();
       addMessage('coach', 'Coach', result.answer, result.sources);
     } else {
       addMessage('error', null, (result && result.message) || 'Something went wrong. Try again.');
@@ -166,12 +217,35 @@
 
   sendBtn.addEventListener('click', submit);
   input.addEventListener('input', syncControls);
+  attachBtn.addEventListener('click', () => picker.click());
+  picker.addEventListener('change', selectClip);
+  removeBtn.addEventListener('click', () => {
+    removeClip();
+    attachBtn.focus();
+  });
+  preview.addEventListener('loadedmetadata', () => {
+    if (!clip || preview.currentSrc !== clip.url) return;
+    const seconds = preview.duration;
+    if (!Number.isFinite(seconds)) return;
+    if (!busy && (seconds < 1 || seconds > 5)) {
+      removeClip();
+      addMessage('error', null, 'The video must be between 1 and 5 seconds long.');
+      return;
+    }
+    clipDetail.textContent = `${seconds.toFixed(2)} s`;
+  });
+  preview.addEventListener('error', () => {
+    if (!clip || preview.currentSrc !== clip.url) return;
+    preview.hidden = true;
+    clipDetail.textContent = 'Preview unavailable. You can still submit the clip.';
+  });
   clearBtn.addEventListener('click', () => {
-    if (busy || !input.value.trim()) return;
+    if (clearBtn.disabled) return;
     log.replaceChildren();
     api.clearSources?.();
     messageCount = 0;
     input.value = '';
+    removeClip();
     syncControls();
     void showEditor();
     input.focus();

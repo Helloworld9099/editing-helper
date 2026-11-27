@@ -1,9 +1,14 @@
 """Shared request limits and atomic quota utilities for the coach API."""
+import asyncio
 import os
+from datetime import datetime, timezone
 
+from fastapi import HTTPException
 from starlette.responses import JSONResponse
 
 MAX_REQUEST_BYTES = 32 * 1024
+MAX_VIDEO_BYTES = 10 * 1024 * 1024
+VIDEO_PATH = "/v1/coach/video"
 
 
 class CoachBodyLimitMiddleware:
@@ -12,14 +17,29 @@ class CoachBodyLimitMiddleware:
     def __init__(self, app, max_bytes=MAX_REQUEST_BYTES):
         self.app = app
         self.max_bytes = max_bytes
+        self.video_upload = asyncio.Lock()
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http" or scope["method"] != "POST":
             await self.app(scope, receive, send)
             return
 
+        if scope["path"] == VIDEO_PATH:
+            if self.video_upload.locked():
+                response = JSONResponse({"detail": "Video analysis is busy. Try again in a moment."},
+                                        status_code=429, headers={"Retry-After": "1"})
+                await response(scope, receive, send)
+                return
+            async with self.video_upload:
+                await self.bounded_request(scope, receive, send, MAX_VIDEO_BYTES + MAX_REQUEST_BYTES, 20)
+        else:
+            await self.bounded_request(scope, receive, send, self.max_bytes)
+
+    async def bounded_request(self, scope, receive, send, max_bytes, upload_timeout=None):
         async def reject():
-            response = JSONResponse({"detail": "Request body is too large."}, status_code=413)
+            detail = ("The video exceeds the 10 MiB upload limit." if upload_timeout
+                      else "Request body is too large.")
+            response = JSONResponse({"detail": detail}, status_code=413)
             await response(scope, receive, send)
 
         for name, value in scope.get("headers", []):
@@ -32,22 +52,28 @@ class CoachBodyLimitMiddleware:
                     response = JSONResponse({"detail": "Invalid Content-Length."}, status_code=400)
                     await response(scope, receive, send)
                     return
-                if length > self.max_bytes:
+                if length > max_bytes:
                     await reject()
                     return
 
         body = bytearray()
-        while True:
-            message = await receive()
-            if message["type"] == "http.disconnect":
-                return
-            chunk = message.get("body", b"")
-            if len(body) + len(chunk) > self.max_bytes:
-                await reject()
-                return
-            body.extend(chunk)
-            if not message.get("more_body", False):
-                break
+        try:
+            async with asyncio.timeout(upload_timeout):
+                while True:
+                    message = await receive()
+                    if message["type"] == "http.disconnect":
+                        return
+                    chunk = message.get("body", b"")
+                    if len(body) + len(chunk) > max_bytes:
+                        await reject()
+                        return
+                    body.extend(chunk)
+                    if not message.get("more_body", False):
+                        break
+        except TimeoutError:
+            response = JSONResponse({"detail": "The video upload took too long. Try again."}, status_code=408)
+            await response(scope, receive, send)
+            return
 
         replayed = False
 
@@ -56,7 +82,9 @@ class CoachBodyLimitMiddleware:
             if replayed:
                 return await receive()
             replayed = True
-            return {"type": "http.request", "body": bytes(body), "more_body": False}
+            payload = bytes(body)
+            body.clear()
+            return {"type": "http.request", "body": payload, "more_body": False}
 
         await self.app(scope, replay, send)
 
@@ -84,3 +112,43 @@ def positive_limit(name: str, default: int, max_value: int = 100000) -> int:
     if n < 1 or n > max_value:
         raise ValueError(f"{name} must be between 1 and {max_value}.")
     return n
+
+
+class VideoQuota:
+    """Limit expensive analyses independently of the general chat quota."""
+
+    def __init__(self, redis_store=None):
+        self.redis = redis_store
+        self.per_minute = positive_limit("COACH_VIDEO_GLOBAL_PER_MINUTE", 3, 60)
+        self.per_day = positive_limit("COACH_VIDEO_GLOBAL_PER_DAY", 20, 1000)
+        self.windows = [(None, 0), (None, 0)]
+
+    @staticmethod
+    def keys(now):
+        return [f"{{coach-quota}}:video:minute:{now:%Y%m%d%H%M}",
+                f"{{coach-quota}}:video:day:{now:%Y%m%d}"]
+
+    @property
+    def limits(self):
+        return [self.per_minute, self.per_day]
+
+    @staticmethod
+    def exceeded():
+        return HTTPException(429, "Video analysis usage limit reached. Try again later.",
+                             headers={"Retry-After": "60"})
+
+    async def charge(self):
+        keys = self.keys(datetime.now(timezone.utc))
+        if self.redis is not None:
+            try:
+                allowed = await self.redis.eval(QUOTA_SCRIPT, 2, *keys, *self.limits, 120, 172800)
+            except Exception:
+                raise HTTPException(503, "Video usage protection is temporarily unavailable.") from None
+            if allowed != 1:
+                raise self.exceeded()
+            return
+        counts = [used if current == previous else 0
+                  for current, (previous, used) in zip(keys, self.windows)]
+        if any(used >= limit for used, limit in zip(counts, self.limits)):
+            raise self.exceeded()
+        self.windows = [(key, used + 1) for key, used in zip(keys, counts)]

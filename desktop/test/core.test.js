@@ -51,6 +51,37 @@ test('sends the configured access token as a bearer header', () =>
     assert.deepEqual(JSON.parse(s.state.body), { question: 'Hi' });
   }));
 
+test('uploads a reference without a question and sends the selected editor and version', () =>
+  withServer((req, res, state) => {
+    state.contentType = req.headers['content-type'];
+    assert.equal(req.headers.authorization, 'Bearer test-coach-token');
+    json(res, 200, { answer: 'Recreate the flash with opacity keyframes.' });
+  }, async ({ url, state }) => {
+    const r = await core.postCoach({
+      baseUrl: url, accessToken: 'test-coach-token', editor: 'Kdenlive', version: '26.08',
+      video: { extension: 'mov', bytes: new Uint8Array([0, 1, 2]).buffer },
+    });
+    assert.equal(r.ok, true);
+    assert.equal(state.path, '/v1/coach/video');
+    const form = await new Response(state.body, { headers: { 'Content-Type': state.contentType } }).formData();
+    assert.equal(form.get('editor'), 'Kdenlive');
+    assert.equal(form.get('version'), '26.08');
+    assert.equal(form.get('question'), '');
+    assert.equal(form.get('video').name, 'reference.mov');
+    assert.deepEqual([...new Uint8Array(await form.get('video').arrayBuffer())], [0, 1, 2]);
+  }));
+
+test('reports video support on an older backend without changing its text path', () =>
+  withServer((req, res) => {
+    if (req.url.endsWith('/video')) json(res, 404, { detail: 'Not Found' });
+    else json(res, 200, { answer: 'Text still works.' });
+  }, async ({ url }) => {
+    const video = { extension: 'mp4', bytes: new Uint8Array([1]).buffer };
+    const r = await core.postCoach({ baseUrl: url, editor: 'Kdenlive', video });
+    assert.match(r.message, /does not support video analysis/);
+    assert.equal((await core.postCoach({ baseUrl: url, question: 'How do I cut?' })).ok, true);
+  }));
+
 test('rejects access tokens over plain HTTP to non-loopback hosts', async () => {
   const r = await core.postCoach({ baseUrl: 'http://coach.example.com', question: 'Hi', accessToken: 'token' });
   assert.equal(r.kind, 'config');

@@ -1,8 +1,8 @@
 """UI checks: loads the real renderer pages in headless Chromium with a stubbed Electron bridge.
-Setup (once):  pip install playwright && playwright install chromium
+Setup (once):  pip install playwright && playwright install chromium; install FFmpeg
 Run:           python3 test/ui/ui_check.py
 Screenshots go to test/ui/out/. This does NOT test Electron windows (drag, always-on-top, focus)."""
-import json, os, pathlib, sys
+import json, os, pathlib, subprocess, sys, tempfile
 from playwright.sync_api import sync_playwright
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
@@ -24,6 +24,10 @@ STUB = """
     getConfig: async () => cfg,
     saveConfig: async (c) => { calls.push(['save', c]); return window.__saveResult; },
     ask: (q) => { calls.push(['ask', q]); return new Promise(r => { pending = r; }); },
+    analyzeVideo: (q, ext, bytes) => {
+      calls.push(['video', q, ext, bytes.byteLength]);
+      return new Promise(r => { pending = r; });
+    },
     openSource: async (url) => { calls.push(['openSource', url]); return true; },
     clearSources: () => calls.push(['clearSources']),
     resizePanel: (...args) => calls.push(['resizePanel', ...args]),
@@ -144,7 +148,7 @@ with sync_playwright() as pw:
     p.wait_for_timeout(100)
     check("panel: source information appears as a button",
           p.locator(".msg.coach .source-link").count() == 1
-          and "Source-reviewed notes" in p.inner_text(".msg.coach .source-label"))
+          and "Source-reviewed notes" in p.locator(".msg.coach .source-label").text_content())
     p.click(".msg.coach .source-link")
     check("panel: source opens through the restricted native bridge",
           ['openSource', 'https://docs.kdenlive.org/en/transform.html'] in p.evaluate("window.__calls"))
@@ -192,6 +196,42 @@ with sync_playwright() as pw:
     check("panel: grip captures outward and inward movement", resize_calls == [
         ["resizePanel", "start"], ["resizePanel", "move", 40, 30],
         ["resizePanel", "move", -40, -25], ["resizePanel", "end"]], resize_calls)
+
+    # ---------------- reference video ----------------
+    with tempfile.TemporaryDirectory() as temp:
+        video_path = pathlib.Path(temp) / "reference.webm"
+        subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i",
+                        "testsrc2=size=160x90:rate=24:duration=2", "-c:v", "libvpx-vp9",
+                        str(video_path)], check=True)
+        p, errs = open_page("panel.html", size=(300, 300))
+        with p.expect_file_chooser() as chooser:
+            p.get_by_role("button", name="Attach reference video").click()
+        chooser.value.set_files(video_path)
+        p.wait_for_function("() => document.querySelector('#preview').readyState >= 1")
+        check("video: shows a playable preview and enables Send with an empty question",
+              p.is_visible("#preview") and p.input_value("#input") == "" and not p.is_disabled("#send"))
+        check("video: controls fit the minimum window",
+              p.locator("#send").bounding_box()["y"] < 275 and not errs, errs)
+        p.get_by_role("button", name="Remove video").click()
+        check("video: removing the file clears the preview and disables Send",
+              p.is_hidden("#attachment") and p.is_disabled("#send"))
+        p.locator("#video-file").set_input_files(video_path)
+        p.click("#send")
+        p.wait_for_function("() => window.__calls.some(c => c[0] === 'video')")
+        check("video: upload sends bytes with no accompanying question and blocks duplicate sends",
+              p.evaluate("window.__calls.filter(c => c[0] === 'video')") ==
+              [["video", "", "webm", video_path.stat().st_size]] and p.is_disabled("#send"))
+        p.evaluate("window.__resolveAsk({ok:false,message:'Try again later.'})")
+        check("video: upload failure retains the clip for retry",
+              p.is_visible("#attachment") and not p.is_disabled("#send"))
+        p.fill("#input", "How do I match the flash?")
+        p.press("#input", "Enter")
+        p.wait_for_function("() => window.__calls.filter(c => c[0] === 'video').length === 2")
+        check("video: retry can include a question",
+              p.evaluate("window.__calls.at(-1)[1]") == "How do I match the flash?")
+        p.evaluate("window.__resolveAsk({ok:true,answer:'Add a two-frame white overlay.'})")
+        check("video: successful analysis appears in chat and clears the attachment",
+              p.is_hidden("#attachment") and "two-frame white overlay" in p.inner_text("#log"))
 
     # ---------------- mascot ----------------
     p, errs = open_page("mascot.html", size=(96, 96))

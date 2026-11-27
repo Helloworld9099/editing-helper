@@ -5,6 +5,7 @@
 !knowledge_rag.py
 !demo_access.py
 !quota_limits.py
+!video_analysis.py
 !knowledge/
 !knowledge/sources/
 !knowledge/sources/*.jsonl

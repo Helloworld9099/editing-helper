@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src blob:">
   <title>Editing Coach</title>
   <link rel="stylesheet" href="shared.css">
   <link rel="stylesheet" href="panel.css">
@@ -29,8 +29,22 @@
         <span id="count" class="muted" aria-label="Question length">0 / 1000</span>
         <button id="clear" class="clear" type="button" disabled>Clear chat</button>
       </div>
+      <div id="attachment" class="attachment" hidden>
+        <video id="preview" preload="metadata" muted playsinline controls aria-label="Reference video preview"></video>
+        <div class="attachment-info">
+          <div id="filename" class="attachment-name"></div>
+          <div id="clip-detail" class="muted" role="status"></div>
+        </div>
+        <button id="remove-video" class="ghost" type="button" aria-label="Remove video" title="Remove video">×</button>
+      </div>
       <div class="composer">
+        <input id="video-file" type="file" accept=".mp4,.mov,.webm,video/mp4,video/quicktime,video/webm" hidden>
         <textarea id="input" rows="2" maxlength="1000" placeholder="How can I make this shot better?" aria-label="Your question"></textarea>
+        <button id="attach-video" class="ghost" type="button" aria-label="Attach reference video" title="Attach a 1–5 second video up to 10 MiB">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M8 13.5l6.5-6.5a2.1 2.1 0 0 1 3 3l-8 8a3.7 3.7 0 0 1-5.2-5.2l8.5-8.5a5.2 5.2 0 0 1 7.4 7.4l-8.4 8.4"/>
+          </svg>
+        </button>
         <button id="send" class="primary" type="button" disabled>Send <span aria-hidden="true">↗</span></button>
       </div>
       <p class="hint muted">Enter to send · Shift+Enter for a new line · Esc to close</p>

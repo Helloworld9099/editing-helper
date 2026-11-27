@@ -6,9 +6,12 @@ const path = require('node:path');
 const http = require('node:http');
 const https = require('node:https');
 const { isIP } = require('node:net');
+const { randomBytes } = require('node:crypto');
 
 const DEFAULT_API_URL = 'http://127.0.0.1:8000';
 const COACH_PATH = '/v1/coach';
+const MAX_VIDEO_BYTES = 10 * 1024 * 1024;
+const VIDEO_TYPES = new Map([['mp4', 'video/mp4'], ['mov', 'video/quicktime'], ['webm', 'video/webm']]);
 const MAX_RESPONSE_BYTES = 1_000_000;
 const MAX_QUESTION_CHARS = 1000; // matches /v1/coach
 // Only entries in SUPPORTED_APPS can be saved or sent.
@@ -249,27 +252,30 @@ function parseResponse(status, buf) {
 const OFFLINE_CODES = new Set(['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'EHOSTUNREACH', 'ENETUNREACH', 'ECONNRESET', 'EPIPE', 'ETIMEDOUT']);
 
 /**
- * POST {"question": ..., "editor"?: ..., "version"?: ...} to <baseUrl>/v1/coach. Never throws; resolves to
+ * Ask the coach using the text endpoint or the reference-video endpoint. Resolves to
  * {ok:true, answer} or {ok:false, kind, message}.
  * kind: empty | config | offline | timeout | tls | http | unexpected
  * No proxies, no redirects followed, response size capped.
  */
-function postCoach({ baseUrl, accessToken = '', question, editor, version, timeoutMs = 90000 }) {
+function postCoach({ baseUrl, accessToken = '', question, editor, version, video, timeoutMs = 90000 }) {
   return new Promise((resolve) => {
     const fail = (kind, message) => resolve({ ok: false, kind, message });
     const q = String(question ?? '').trim();
-    if (!q) return fail('empty', 'Type a question first.');
+    if (!q && video == null) return fail('empty', 'Type a question first.');
     if (q.length > MAX_QUESTION_CHARS) return fail('empty', `That question is too long (limit ${MAX_QUESTION_CHARS} characters).`);
     const { url: base, error } = validateBaseUrl(baseUrl);
     if (error) return fail('config', `Server address problem: ${error}`);
 
-    const target = new URL(base + COACH_PATH);
+    const target = new URL(base + COACH_PATH + (video == null ? '' : '/video'));
     const token = accessToken.trim();
     if (token && !/^[A-Za-z0-9._~+/=-]+$/.test(token)) {
       return fail('config', 'The configured coach access token is invalid.');
     }
     if (token && target.protocol !== 'https:' && !isLoopback(target.hostname)) {
       return fail('config', 'Use HTTPS to send a coach access token to a hosted server.');
+    }
+    if (video != null && target.protocol !== 'https:' && !isLoopback(target.hostname)) {
+      return fail('config', 'Use HTTPS to upload a reference video to a hosted server.');
     }
     const payload = { question: q };
     if (editor != null) {
@@ -278,8 +284,27 @@ function postCoach({ baseUrl, accessToken = '', question, editor, version, timeo
       const v = sanitizeText(String(version ?? '')).trim().slice(0, 40);
       if (v) payload.version = v;
     }
-    const body = Buffer.from(JSON.stringify(payload));
-    const headers = { 'Content-Type': 'application/json', 'Content-Length': body.length, Accept: 'application/json' };
+    let body, contentType;
+    if (video != null) {
+      if (!payload.editor) return fail('config', 'Choose a supported editor in Settings.');
+      const { extension, bytes } = video;
+      const mime = VIDEO_TYPES.get(extension);
+      if (!mime || !(bytes instanceof ArrayBuffer) || !bytes.byteLength) {
+        return fail('video', 'Choose a playable MP4, MOV or WebM video.');
+      }
+      if (bytes.byteLength > MAX_VIDEO_BYTES) return fail('video', 'The video exceeds the 10 MiB upload limit.');
+      const boundary = randomBytes(24).toString('hex');
+      const fields = Object.entries(payload).map(([key, value]) =>
+        `--${boundary}\r\nContent-Disposition: form-data; name="${key}"\r\n\r\n${value}\r\n`
+      ).join('');
+      const fileHeader = `--${boundary}\r\nContent-Disposition: form-data; name="video"; filename="reference.${extension}"\r\nContent-Type: ${mime}\r\n\r\n`;
+      body = Buffer.concat([Buffer.from(fields + fileHeader), Buffer.from(bytes), Buffer.from(`\r\n--${boundary}--\r\n`)]);
+      contentType = `multipart/form-data; boundary=${boundary}`;
+    } else {
+      body = Buffer.from(JSON.stringify(payload));
+      contentType = 'application/json';
+    }
+    const headers = { 'Content-Type': contentType, 'Content-Length': body.length, Accept: 'application/json' };
     if (token) headers.Authorization = `Bearer ${token}`;
     const lib = target.protocol === 'https:' ? https : http;
     const secs = Math.round(timeoutMs / 1000);
@@ -300,7 +325,13 @@ function postCoach({ baseUrl, accessToken = '', question, editor, version, timeo
         }
         chunks.push(c);
       });
-      res.on('end', () => finish(parseResponse(res.statusCode, Buffer.concat(chunks))));
+      res.on('end', () => {
+        if (video != null && res.statusCode === 404) {
+          finish({ ok: false, kind: 'http', message: 'This coach server does not support video analysis yet.' });
+          return;
+        }
+        finish(parseResponse(res.statusCode, Buffer.concat(chunks)));
+      });
       res.on('error', () => finish(broken));
       res.on('close', () => finish(broken)); // no-op if 'end' already finished
     });

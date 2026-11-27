@@ -1,7 +1,7 @@
 {
   "name": "editing-coach",
   "productName": "Editing Coach",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Floating desktop companion: an always-on-top pet that asks the Editing Coach FastAPI backend a question. Not tied to any one editing app.",
   "main": "src/main.js",
   "private": true,

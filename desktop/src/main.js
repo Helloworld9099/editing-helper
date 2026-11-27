@@ -366,7 +366,7 @@ function registerIpc() {
     if (isFrom(e, panel)) allowedSourceUrls.clear();
   });
 
-  ipcMain.handle('coach:ask', async (e, question) => {
+  ipcMain.handle('coach:ask', async (e, question, video) => {
     if (!isFrom(e, panel)) return { ok: false, kind: 'unexpected', message: 'Not allowed.' };
     if (busy) return { ok: false, kind: 'busy', message: 'Still working on your last question.' };
     busy = true;
@@ -381,6 +381,7 @@ function registerIpc() {
         : await core.postCoach({
           ...connection,
           question,
+          video,
           editor: cfg.editor,
           version: cfg.editorVersion,
           timeoutMs: cfg.timeoutSeconds * 1000,

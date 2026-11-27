@@ -112,6 +112,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: python -m pip install -r requirements.txt
       - run: python knowledge_rag.py validate
       - run: python knowledge_rag.py build
@@ -135,6 +136,7 @@ jobs:
           pattern: editing-helper-*-unsigned
           path: release-assets
           merge-multiple: true
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - name: Verify hosted demo
         shell: bash
         run: |
@@ -143,6 +145,12 @@ jobs:
           curl --fail --silent --show-error --max-time 90 "$PUBLIC_API_URL/v1/coach" \
             -H 'Content-Type: application/json' \
             --data '{"question":"How do I create a smooth zoom?","editor":"Kdenlive"}' | jq -e '.answer | type == "string" and length > 0'
+          clip="$RUNNER_TEMP/flash.mp4"
+          ffmpeg -v error -f lavfi -i 'testsrc2=size=160x90:rate=24:duration=2' \
+            -vf "drawbox=w=iw:h=ih:color=white:t=fill:enable='between(n,25,27)'" -c:v libx264 "$clip"
+          curl --fail --silent --show-error --max-time 90 "$PUBLIC_API_URL/v1/coach/video" \
+            -F 'editor=Kdenlive' -F 'version=26.08' -F "video=@$clip;type=video/mp4" \
+            | jq -e '.answer | type == "string" and length > 0'
       - name: Publish verified release and synchronize checksums
         shell: bash
         run: |
@@ -175,9 +183,9 @@ jobs:
           target="$(git rev-parse HEAD)"
           {
             echo 'Windows x64 and Ubuntu/Debian amd64 unsigned judge-demo installers.'
+            echo 'Attach a 1–5 second MP4, MOV, or WebM in chat for timestamped analysis and editor-specific recreation steps. Files are limited to 10 MiB.'
             echo 'Includes automated install/startup smoke checks and a hosted API smoke check.'
-            echo 'Full interactive editing accuracy and clean physical-machine acceptance still require manual testing.'
-            echo 'See README.md for installation. Do not bypass malware detections.'
+            echo 'For Linux, run `sudo apt install ./editing-coach_'"$version"'_amd64.deb`. On Windows, run the setup executable.'
             echo
             echo 'SHA-256 checksums:'
             echo '~~~text'

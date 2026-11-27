@@ -11,7 +11,8 @@ Create a private Redis add-on or use a reachable managed Redis instance. Set the
 | Variable | Value |
 | --- | --- |
 | `COACH_PROVIDER` | `gemini` |
-| `COACH_MODEL` | A supported Gemini text model available to the Google project |
+| `COACH_MODEL` | A Gemini text model available to the Google project |
+| `COACH_VIDEO_MODEL` | Optional override for clip analysis. Defaults to `COACH_MODEL`. The selected model must support video input and structured JSON output. |
 | `GEMINI_API_KEY` | Server-side Gemini secret |
 | `COACH_AUTH_MODE` | `demo` |
 | `COACH_REDIS_URL` | Private Redis connection URL |
@@ -19,6 +20,8 @@ Create a private Redis add-on or use a reachable managed Redis instance. Set the
 | `COACH_DEMO_GLOBAL_PER_MINUTE` | `20` |
 | `COACH_DEMO_IP_PER_MINUTE` | `8` |
 | `COACH_DEMO_IP_PER_DAY` | `60` |
+| `COACH_VIDEO_GLOBAL_PER_MINUTE` | `3` by default |
+| `COACH_VIDEO_GLOBAL_PER_DAY` | `20` by default |
 | `COACH_ALLOWED_HOSTS` | `p01--demo-backend--fbvcc7mvswr6.code.run,127.0.0.1` |
 
 Do not inherit `COACH_ACCESS_TOKEN` in demo mode. Restrict private secret groups to the intended service. Keep provider keys and Redis credentials out of source, installers, and public logs. Rotate any previously committed credentials; deleting a file does not remove it from Git history.
@@ -38,6 +41,10 @@ curl -i "$BASE/v1/coach" \
 ```
 
 Expect liveness JSON and HTTP 200 with an answer without an Authorization header. In an isolated test service with a low cap, verify HTTP 429 on quota exhaustion, HTTP 413 for oversized bodies, HTTP 422 for invalid input, and HTTP 503 during a Redis outage. Confirm rejected requests do not reach the provider.
+
+The Docker image includes FFmpeg and FFprobe. Keep the container's temporary directory writable and allow up to a 10 MiB video plus multipart headers through the ingress. Reference clips must be 1–5 seconds. Each analysis counts toward both the demo budget and the separate video budget. For shared-token deployments with multiple replicas, set `COACH_REDIS_URL` so video counters are shared. The desktop installers use the backend for processing and need no local FFmpeg installation.
+
+After deploying the backend, open the desktop chat and send a known short clip through the attachment button. Verify that the response includes approximate effect timing, instructions for the selected editor and version, and relevant references where available. Then send a text-only question from an existing installer.
 
 ## Build installers
 

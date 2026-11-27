@@ -27,7 +27,7 @@ class DemoAccess:
         self.ip_per_day = positive_limit("COACH_DEMO_IP_PER_DAY", 60, 200)
         self.ip_per_minute = positive_limit("COACH_DEMO_IP_PER_MINUTE", 8, 60)
 
-    async def charge(self, request: Request) -> None:
+    async def charge(self, request: Request, video_quota=None) -> None:
         now = datetime.now(timezone.utc)
         minute = now.strftime("%Y%m%d%H%M")
         day = now.strftime("%Y%m%d")
@@ -44,14 +44,19 @@ class DemoAccess:
         ]
         limits = [self.ip_per_minute, self.ip_per_day,
                   self.global_per_minute, self.global_per_day]
+        expiries = [120, 172800, 120, 172800]
+        if video_quota is not None:
+            keys.extend(video_quota.keys(now))
+            limits.extend(video_quota.limits)
+            expiries.extend([120, 172800])
         try:
             allowed = await self.redis.eval(
-                QUOTA_SCRIPT, len(keys), *keys, *limits,
-                120, 172800, 120, 172800,
+                QUOTA_SCRIPT, len(keys), *keys, *limits, *expiries,
             )
         except Exception:
             # A broken Redis connection must not bypass the guest quota.
             raise HTTPException(503, "Demo usage protection is temporarily unavailable.") from None
         if allowed != 1:
-            raise HTTPException(429, "Judge demo usage limit reached. Try again later.",
+            label = "Video analysis or demo" if video_quota is not None else "Judge demo"
+            raise HTTPException(429, f"{label} usage limit reached. Try again later.",
                                 headers={"Retry-After": "60"})
