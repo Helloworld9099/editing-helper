@@ -328,7 +328,7 @@ def create_app(*, model=None, timeout=60.0, transport=None, provider=None, quota
             raise HTTPException(429, "Coach is busy. Try again in a moment.", headers={"Retry-After": "1"})
         async with slot:
             try:
-                async with asyncio.timeout(12):
+                async with asyncio.timeout(25):
                     clip_parts, duration, motion, flash = await prepare_clip(data, filename)
             except TimeoutError:
                 raise HTTPException(422, "The video took too long to decode. Try a smaller export.") from None

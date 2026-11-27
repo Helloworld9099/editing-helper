@@ -250,7 +250,13 @@ async def prepare_clip(data, filename):
                 {"text": f"Storyboard, left to right across each row. Frame times: {times}. Ignore empty cells."},
                 media_part("image/jpeg", sheet.read_bytes()),
             ])
-        motion = await framing_changes(normalized)
+        # Let the native clip reach Gemini even on hosts where the optional
+        # stabilization passes take longer than the visual evidence warrants.
+        try:
+            async with asyncio.timeout(5):
+                motion = await framing_changes(normalized)
+        except TimeoutError:
+            motion = ""
         flash = await white_flashes(normalized)
         if motion:
             parts.append({"text": "Approximate whole-frame motion from tracked visual features:\n" + motion})

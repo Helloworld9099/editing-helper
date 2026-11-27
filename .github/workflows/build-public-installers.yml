@@ -146,11 +146,11 @@ jobs:
             -H 'Content-Type: application/json' \
             --data '{"question":"How do I create a smooth zoom?","editor":"Kdenlive"}' | jq -e '.answer | type == "string" and length > 0'
           clip="$RUNNER_TEMP/flash.mp4"
-          ffmpeg -v error -f lavfi -i 'testsrc2=size=160x90:rate=24:duration=2' \
-            -vf "drawbox=w=iw:h=ih:color=white:t=fill:enable='between(n,25,27)'" -c:v libx264 "$clip"
+          ffmpeg -v error -f lavfi -i 'testsrc2=size=640x360:rate=24:duration=4' \
+            -vf "drawbox=w=iw:h=ih:color=white:t=fill:enable='between(n,35,37)'" -c:v libx264 "$clip"
           curl --fail --silent --show-error --max-time 90 "$PUBLIC_API_URL/v1/coach/video" \
             -F 'editor=Kdenlive' -F 'version=26.08' -F "video=@$clip;type=video/mp4" \
-            | jq -e '.answer | type == "string" and length > 0'
+            | jq -e '.answer | test("flash|white burst|white frame|white overlay"; "i")'
       - name: Publish verified release and synchronize checksums
         shell: bash
         run: |
