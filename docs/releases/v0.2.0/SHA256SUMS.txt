@@ -1,0 +1,2 @@
+f63ae22c97f0b6a32973303ce7385d13e68ba2fbd5d2a174edb4b79c6b3f954f  editing-coach_0.2.0_amd64.deb
+dcb663eb5c5553595bc6ae8bc342aa5b7f8599129dd6fb463e9c2a4e3ef72828  Editing Helper Setup 0.2.0.exe
