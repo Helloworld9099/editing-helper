@@ -243,7 +243,18 @@ def create_app(*, model=None, timeout=60.0, transport=None, provider=None, quota
                     await managed_redis.aclose()
 
     api = FastAPI(title="Editing Helper API", lifespan=lifespan)
-    api.add_middleware(CoachBodyLimitMiddleware)
+    async def guard_video_upload(request):
+        # Reject unauthorized private uploads before receiving large bodies.
+        if access_token:
+            await require_access_token(await bearer(request))
+        if video_quota is None:
+            raise HTTPException(503, "Video analysis requires a Gemini-enabled coach server.")
+        if demo_access is not None:
+            await demo_access.admit_video_upload(request, video_quota)
+
+    api.add_middleware(CoachBodyLimitMiddleware,
+                       video_guard=guard_video_upload,
+                       guest_enabled=demo_access is None or demo_access.enabled)
     api.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts)
 
     @api.get("/health")
@@ -327,6 +338,10 @@ def create_app(*, model=None, timeout=60.0, transport=None, provider=None, quota
         if slot.locked():
             raise HTTPException(429, "Coach is busy. Try again in a moment.", headers={"Retry-After": "1"})
         async with slot:
+            # Recheck before spending CPU: another replica may have used the
+            # remaining allowance while the client was uploading.
+            if demo_access is not None:
+                await demo_access.charge(request, video_quota, check_only=True)
             try:
                 async with asyncio.timeout(25):
                     clip_parts, duration, motion, flash = await prepare_clip(data, filename)

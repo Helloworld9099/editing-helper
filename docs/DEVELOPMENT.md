@@ -75,7 +75,7 @@ Hosted providers require server-side credentials and either shared-token mode or
 {"question":"How do I create a smooth zoom?","editor":"DaVinci Resolve","version":"20.1"}
 ```
 
-Editor and version are optional. The reply contains an `answer` string and, when available, `sources`. Questions are limited to 1,000 characters and POST bodies to 32 KiB, including streamed bodies. Private hosted deployments require a bearer token. Demo quotas are reserved after validation and admission, before the model call.
+Editor and version are optional. The reply contains an `answer` string and, when available, `sources`. Questions are limited to 1,000 characters and POST bodies to 32 KiB, including streamed bodies. Private hosted deployments require a bearer token. Demo quotas reserve one model call for text; video analysis reserves two model calls and one separate video-analysis unit after validation. Independent guest upload-attempt limits and a read-only budget preflight protect media decoding. Request bodies have bounded upload time and per-process concurrency.
 
 | Status | Meaning |
 | --- | --- |

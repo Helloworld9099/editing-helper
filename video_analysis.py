@@ -78,7 +78,11 @@ async def run_media(*command, cwd=None):
         process = await asyncio.create_subprocess_exec(
             *command, stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
-            cwd=cwd, env={**os.environ, "OMP_NUM_THREADS": "2"},
+            cwd=cwd, env={
+                "PATH": os.environ.get("PATH", os.defpath),
+                "LANG": "C", "LC_ALL": "C", "OMP_NUM_THREADS": "2",
+                "HOME": str(cwd) if cwd is not None else "/tmp",
+            },
         )
     except OSError:
         raise HTTPException(503, "Video processing is temporarily unavailable.") from None
@@ -164,12 +168,18 @@ async def white_flashes(path):
     return "\n".join(flashes)
 
 
+def demuxer_options(demuxer):
+    # The MOV family supports external data references; never follow them.
+    return ("-enable_drefs", "0", "-use_absolute_path", "0") if demuxer == "mov" else ()
+
+
 async def probe(path, demuxer):
     output = await run_media(
         "ffprobe", "-v", "error", "-max_alloc", "67108864",
-        "-protocol_whitelist", "file", "-f", demuxer, "-select_streams", "V:0",
+        "-protocol_whitelist", "file", "-f", demuxer, *demuxer_options(demuxer),
+        "-select_streams", "V:0",
         "-show_entries", "format=duration:format_tags=major_brand:stream=width,height,duration,nb_frames",
-        "-of", "json", str(path),
+        "-of", "json", str(path), cwd=path.parent,
     )
     try:
         metadata = json.loads(output)
@@ -207,7 +217,7 @@ async def prepare_clip(data, filename):
             duration = float(container["duration"])
             stream_duration = float(stream.get("duration", duration))
             width, height = int(stream["width"]), int(stream["height"])
-        except (ValueError, KeyError):
+        except (ValueError, KeyError, TypeError, OverflowError):
             raise invalid_video() from None
         if not (1 <= duration <= MAX_SECONDS and 1 <= stream_duration <= MAX_SECONDS):
             raise invalid_duration()
@@ -217,7 +227,7 @@ async def prepare_clip(data, filename):
         # Re-encoding removes audio and metadata, and validates the actual decoded footage.
         await run_media(
             "ffmpeg", "-nostdin", "-v", "error", "-xerror", "-max_alloc", "67108864",
-            "-protocol_whitelist", "file", "-f", demuxer, "-threads", "2",
+            "-protocol_whitelist", "file", "-f", demuxer, *demuxer_options(demuxer), "-threads", "2",
             "-max_pixels", str(MAX_PIXELS), "-i", str(source),
             "-map", "0:V:0", "-an", "-map_metadata", "-1", "-map_chapters", "-1",
             "-filter_threads", "2",
@@ -226,9 +236,13 @@ async def prepare_clip(data, filename):
             "-frames:v", str(MAX_SECONDS * ANALYSIS_FPS + 1),
             "-c:v", "libx264", "-threads", "2", "-preset", "fast", "-crf", "20",
             "-maxrate", "4M", "-bufsize", "4M", "-movflags", "+faststart", str(normalized),
+            cwd=Path(directory),
         )
         _, normalized_stream = await probe(normalized, "mov")
-        frame_count = int(normalized_stream.get("nb_frames", 0))
+        try:
+            frame_count = int(normalized_stream.get("nb_frames", 0))
+        except (TypeError, ValueError, OverflowError):
+            raise invalid_video() from None
         if not ANALYSIS_FPS <= frame_count <= MAX_SECONDS * ANALYSIS_FPS:
             raise invalid_duration()
         # Compact comparison sheets make gradual reframing and independent layer motion

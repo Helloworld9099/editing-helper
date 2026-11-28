@@ -3,7 +3,7 @@ import asyncio
 import os
 from datetime import datetime, timezone
 
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 from starlette.responses import JSONResponse
 
 MAX_REQUEST_BYTES = 32 * 1024
@@ -14,30 +14,52 @@ VIDEO_PATH = "/v1/coach/video"
 class CoachBodyLimitMiddleware:
     """Bound POST bodies before FastAPI parses JSON, including chunked bodies."""
 
-    def __init__(self, app, max_bytes=MAX_REQUEST_BYTES):
+    def __init__(self, app, max_bytes=MAX_REQUEST_BYTES, *, video_guard=None, guest_enabled=True):
         self.app = app
         self.max_bytes = max_bytes
+        self.video_guard = video_guard
+        self.guest_enabled = guest_enabled
         self.video_upload = asyncio.Lock()
+        self.in_flight = 0
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http" or scope["method"] != "POST":
             await self.app(scope, receive, send)
             return
 
-        if scope["path"] == VIDEO_PATH:
-            if self.video_upload.locked():
-                response = JSONResponse({"detail": "Video analysis is busy. Try again in a moment."},
-                                        status_code=429, headers={"Retry-After": "1"})
-                await response(scope, receive, send)
-                return
-            async with self.video_upload:
-                await self.bounded_request(scope, receive, send, MAX_VIDEO_BYTES + MAX_REQUEST_BYTES, 20)
-        else:
-            await self.bounded_request(scope, receive, send, self.max_bytes)
+        if not self.guest_enabled:
+            await JSONResponse({"detail": "The public demo is temporarily disabled."},
+                               status_code=503)(scope, receive, send)
+            return
+        if self.in_flight >= 16:
+            await JSONResponse({"detail": "Coach is busy. Try again in a moment."},
+                               status_code=429, headers={"Retry-After": "1"})(scope, receive, send)
+            return
+        self.in_flight += 1
+        try:
+            if scope["path"] == VIDEO_PATH:
+                if self.video_upload.locked():
+                    await JSONResponse({"detail": "Video analysis is busy. Try again in a moment."},
+                                       status_code=429, headers={"Retry-After": "1"})(scope, receive, send)
+                    return
+                async with self.video_upload:
+                    # Fail closed before buffering or decoding an untrusted clip.
+                    if self.video_guard is not None:
+                        try:
+                            await self.video_guard(Request(scope))
+                        except HTTPException as exc:
+                            await JSONResponse({"detail": exc.detail}, status_code=exc.status_code,
+                                               headers=exc.headers)(scope, receive, send)
+                            return
+                    await self.bounded_request(scope, receive, send, MAX_VIDEO_BYTES + MAX_REQUEST_BYTES, 20)
+            else:
+                await self.bounded_request(scope, receive, send, self.max_bytes, 15)
+        finally:
+            self.in_flight -= 1
 
     async def bounded_request(self, scope, receive, send, max_bytes, upload_timeout=None):
         async def reject():
-            detail = ("The video exceeds the 10 MiB upload limit." if upload_timeout
+            detail = ("The video exceeds the 10 MiB upload limit." if scope["path"] == VIDEO_PATH
                       else "Request body is too large.")
             response = JSONResponse({"detail": detail}, status_code=413)
             await response(scope, receive, send)
@@ -71,7 +93,7 @@ class CoachBodyLimitMiddleware:
                     if not message.get("more_body", False):
                         break
         except TimeoutError:
-            response = JSONResponse({"detail": "The video upload took too long. Try again."}, status_code=408)
+            response = JSONResponse({"detail": "The request upload took too long. Try again."}, status_code=408)
             await response(scope, receive, send)
             return
 
@@ -91,13 +113,17 @@ class CoachBodyLimitMiddleware:
 
 # Use a Redis Cluster hash tag so all keys in the atomic script share a slot.
 QUOTA_SCRIPT = """
+-- ARGV: limits, expiry seconds, positive reservation weights, check-only flag.
 for i = 1, #KEYS do
   local used = tonumber(redis.call('GET', KEYS[i]) or '0')
-  if used >= tonumber(ARGV[i]) then return 0 end
+  local weight = tonumber(ARGV[2 * #KEYS + i])
+  if used + weight > tonumber(ARGV[i]) then return 0 end
 end
+if ARGV[3 * #KEYS + 1] == '1' then return 1 end
 for i = 1, #KEYS do
-  local count = redis.call('INCR', KEYS[i])
-  if count == 1 then redis.call('EXPIRE', KEYS[i], tonumber(ARGV[#KEYS + i])) end
+  local weight = tonumber(ARGV[2 * #KEYS + i])
+  local count = redis.call('INCRBY', KEYS[i], weight)
+  if count == weight then redis.call('EXPIRE', KEYS[i], tonumber(ARGV[#KEYS + i])) end
 end
 return 1
 """
@@ -141,7 +167,7 @@ class VideoQuota:
         keys = self.keys(datetime.now(timezone.utc))
         if self.redis is not None:
             try:
-                allowed = await self.redis.eval(QUOTA_SCRIPT, 2, *keys, *self.limits, 120, 172800)
+                allowed = await self.redis.eval(QUOTA_SCRIPT, 2, *keys, *self.limits, 120, 172800, 1, 1, 0)
             except Exception:
                 raise HTTPException(503, "Video usage protection is temporarily unavailable.") from None
             if allowed != 1:

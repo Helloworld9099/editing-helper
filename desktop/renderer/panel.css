@@ -152,6 +152,7 @@ footer {
 .attachment video { width: 96px; height: 50px; background: #183a34; border-radius: 5px; }
 .attachment-info { flex: 1; min-width: 0; font-size: 11px; }
 .attachment-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.clip-privacy { margin: 3px 0 0; font-size: 10px; line-height: 1.25; color: #435f58; }
 #remove-video { padding: 2px 7px; font-size: 17px; }
 #attach-video { display: grid; place-items: center; padding: 7px; align-self: flex-end; }
 #attach-video:disabled, #remove-video:disabled { opacity: .55; cursor: not-allowed; }

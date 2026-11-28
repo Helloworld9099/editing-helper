@@ -16,6 +16,18 @@ concurrency:
 jobs:
   backend:
     runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      TEST_REDIS_URL: redis://127.0.0.1:6379/15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -26,6 +38,12 @@ jobs:
       - run: python knowledge_rag.py validate
       - run: python knowledge_rag.py build
       - run: python -m unittest discover -s tests -v
+      - name: Audit installed Python dependencies
+        shell: bash
+        run: |
+          python -m pip freeze > "$RUNNER_TEMP/backend-dependencies.txt"
+          python -m pip install pip-audit
+          python -m pip_audit --no-deps --disable-pip -r "$RUNNER_TEMP/backend-dependencies.txt"
 
   desktop:
     runs-on: ubuntu-latest
@@ -39,6 +57,16 @@ jobs:
           node-version: '22'
       - run: npm ci
       - run: npm test
+      - run: npm audit --audit-level=high
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check renderer and upload disclosure
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y ffmpeg
+          python -m pip install playwright
+          python -m playwright install --with-deps chromium
+          python test/ui/ui_check.py
 
   docker:
     runs-on: ubuntu-latest

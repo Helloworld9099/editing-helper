@@ -20,6 +20,11 @@ Create a private Redis add-on or use a reachable managed Redis instance. Set the
 | `COACH_DEMO_GLOBAL_PER_MINUTE` | `20` |
 | `COACH_DEMO_IP_PER_MINUTE` | `8` |
 | `COACH_DEMO_IP_PER_DAY` | `60` |
+| `COACH_DEMO_ENABLED` | `1` by default; set to `0` and redeploy to disable guest AI requests |
+| `COACH_UPLOAD_GLOBAL_PER_MINUTE` | `8` by default |
+| `COACH_UPLOAD_GLOBAL_PER_DAY` | `60` by default |
+| `COACH_UPLOAD_IP_PER_MINUTE` | `4` by default |
+| `COACH_UPLOAD_IP_PER_DAY` | `30` by default |
 | `COACH_VIDEO_GLOBAL_PER_MINUTE` | `3` by default |
 | `COACH_VIDEO_GLOBAL_PER_DAY` | `20` by default |
 | `COACH_ALLOWED_HOSTS` | `p01--demo-backend--fbvcc7mvswr6.code.run,127.0.0.1` |
@@ -42,7 +47,7 @@ curl -i "$BASE/v1/coach" \
 
 Expect liveness JSON and HTTP 200 with an answer without an Authorization header. In an isolated test service with a low cap, verify HTTP 429 on quota exhaustion, HTTP 413 for oversized bodies, HTTP 422 for invalid input, and HTTP 503 during a Redis outage. Confirm rejected requests do not reach the provider.
 
-The Docker image includes FFmpeg and FFprobe. Keep the container's temporary directory writable and allow up to a 10 MiB video plus multipart headers through the ingress. Reference clips must be 1–5 seconds. Each analysis counts toward both the demo budget and the separate video budget. For shared-token deployments with multiple replicas, set `COACH_REDIS_URL` so video counters are shared. The desktop installers use the backend for processing and need no local FFmpeg installation.
+The Docker image includes FFmpeg and FFprobe. Keep the container's temporary directory writable and allow up to a 10 MiB video plus multipart headers through the ingress. Reference clips must be 1–5 seconds. Before accepting a guest upload, the backend reserves an upload attempt and checks that enough model and video budget remains. It rechecks before decoding, then atomically reserves two model calls and one analysis after validation. Invalid uploads consume attempt allowance, not AI allowance; failed upstream calls are not refunded. Media subprocesses receive a limited environment without API or Redis credentials. This is defense in depth, not an isolated media sandbox. For shared-token deployments with multiple replicas, set `COACH_REDIS_URL` so video counters are shared. The desktop installers use the backend for processing and need no local FFmpeg installation.
 
 After deploying the backend, open the desktop chat and send a known short clip through the attachment button. Verify that the response includes approximate effect timing, instructions for the selected editor and version, and relevant references where available. Then send a text-only question from an existing installer.
 
@@ -76,7 +81,7 @@ For an unpackaged demo preview, generate the release config and run `EDITING_HEL
 
 ## Release verification
 
-Installers appear in `desktop/dist/`. Publish the Windows `.exe` and Linux `.deb` as GitHub Release assets, not source files. Include [SHA-256 checksums for the supplied v0.1.0 builds](../docs/releases/v0.1.0/SHA256SUMS.txt); regenerate the checksum file after rebuilding. The optional blockmap is not needed for manual installation.
+Installers appear in `desktop/dist/`. Publish the Windows `.exe` and Linux `.deb` as GitHub Release assets, not source files. Include SHA-256 checksums with every versioned release; regenerate the checksum file after rebuilding. The optional blockmap is not needed for manual installation.
 
 The supplied Linux installer was inspected against source commit `39bc9650d407ad3f25b32cd85313bed5404cc77e`; all 15 packaged application and renderer source files matched and its public demo URL was confirmed. The supplied Windows file is an unsigned NSIS installer; its payload and installation behavior were not independently verified. Both supplied installers predate subsequent welcome-screen changes. Inspection is not a malware scan or runtime acceptance test.
 

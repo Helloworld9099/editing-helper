@@ -122,15 +122,67 @@ class VideoApiTests(unittest.TestCase):
                 return self.reply('{"effects":[],"observations":"No clear deliberate effects."}')
             return self.reply("No deliberate effect is evident.")
 
-        settings = {"COACH_AUTH_MODE": "demo", "COACH_ACCESS_TOKEN": "", "COACH_DEMO_GLOBAL_PER_DAY": "2",
+        settings = {"COACH_AUTH_MODE": "demo", "COACH_ACCESS_TOKEN": "", "COACH_DEMO_GLOBAL_PER_DAY": "3",
                     "COACH_VIDEO_GLOBAL_PER_DAY": "1"}
         store = FakeRedis()
         with self.client(provider, settings, quota_store=store) as client:
             first = self.upload(client, "clean.webm", headers={}, question="Is there an effect?")
             self.assertEqual(first.status_code, 200, first.text)
-            self.assertEqual(self.upload(client, headers={}).status_code, 429)
+            with patch("app.prepare_clip", side_effect=AssertionError("Budget exhausted before decoding")) as decode:
+                self.assertEqual(self.upload(client, headers={}).status_code, 429)
+                decode.assert_not_called()
             self.assertEqual(client.post("/v1/coach", json={"question": "hello"}).status_code, 200)
             self.assertEqual(client.post("/v1/coach", json={"question": "hello"}).status_code, 429)
+        calls = [count for key, count in store.counts.items() if ":demo:global:day:" in key]
+        videos = [count for key, count in store.counts.items() if ":video:day:" in key]
+        self.assertEqual(calls, [3])
+        self.assertEqual(videos, [1])
+
+    def test_video_requires_two_model_calls_remaining_before_decoding(self):
+        settings = {"COACH_AUTH_MODE": "demo", "COACH_ACCESS_TOKEN": "",
+                    "COACH_DEMO_GLOBAL_PER_DAY": "1"}
+        store = FakeRedis()
+        with self.client(self.no_gemini, settings, quota_store=store) as client:
+            with patch("app.prepare_clip", side_effect=AssertionError("Quota must precede decoding")) as decode:
+                self.assertEqual(self.upload(client, headers={}).status_code, 429)
+                decode.assert_not_called()
+        self.assertFalse(any(":demo:" in key or ":video:" in key for key in store.counts))
+
+    def test_invalid_uploads_have_separate_predecode_limit(self):
+        settings = {"COACH_AUTH_MODE": "demo", "COACH_ACCESS_TOKEN": "",
+                    "COACH_DEMO_GLOBAL_PER_DAY": "20", "COACH_UPLOAD_IP_PER_DAY": "1"}
+        store = FakeRedis()
+        with self.client(self.no_gemini, settings, quota_store=store) as client:
+            self.assertEqual(self.upload(client, "fake.mp4", data=b"bad video", headers={}).status_code, 422)
+            with patch("app.prepare_clip", side_effect=AssertionError("Upload limit must precede decoding")) as decode:
+                self.assertEqual(self.upload(client, headers={}).status_code, 429)
+                decode.assert_not_called()
+        self.assertFalse(any(":demo:" in key or ":video:" in key for key in store.counts))
+        self.assertEqual([count for key, count in store.counts.items() if ":upload:global:day:" in key], [1])
+
+    def test_video_redis_outage_does_not_decode(self):
+        settings = {"COACH_AUTH_MODE": "demo", "COACH_ACCESS_TOKEN": "",
+                    "COACH_DEMO_GLOBAL_PER_DAY": "20"}
+        store = FakeRedis()
+        store.fail = True
+        with self.client(self.no_gemini, settings, quota_store=store) as client:
+            with patch("app.prepare_clip", side_effect=AssertionError("Redis unavailable")) as decode:
+                self.assertEqual(self.upload(client, headers={}).status_code, 503)
+                decode.assert_not_called()
+
+    def test_media_subprocess_does_not_inherit_credentials(self):
+        import asyncio
+        import sys
+        from video_analysis import run_media
+
+        with patch.dict(os.environ, {"GEMINI_API_KEY": "not-for-child",
+                                     "COACH_ACCESS_TOKEN": "not-for-child",
+                                     "COACH_REDIS_URL": "not-for-child"}):
+            result = asyncio.run(run_media(sys.executable, "-c",
+                "import json, os; print(json.dumps(dict(os.environ)))"))
+        child = json.loads(result)
+        for name in ("GEMINI_API_KEY", "COACH_ACCESS_TOKEN", "COACH_REDIS_URL"):
+            self.assertNotIn(name, child)
 
     def test_provider_failures_and_timeouts_return_actionable_statuses(self):
         def timeout(_request):

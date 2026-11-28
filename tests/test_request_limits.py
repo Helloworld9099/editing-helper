@@ -3,11 +3,12 @@ import asyncio
 import json
 import unittest
 
-from quota_limits import CoachBodyLimitMiddleware
+from fastapi import HTTPException
+from quota_limits import CoachBodyLimitMiddleware, VIDEO_PATH
 
 
 class RequestLimitTests(unittest.TestCase):
-    def run_request(self, chunks, headers=(), method="POST", limit=16):
+    def run_request(self, chunks, headers=(), method="POST", limit=16, path="/v1/coach", **options):
         sent = []
         seen = []
         pending = iter(chunks)
@@ -23,8 +24,8 @@ class RequestLimitTests(unittest.TestCase):
             await send({"type": "http.response.start", "status": 200, "headers": []})
             await send({"type": "http.response.body", "body": b"ok"})
 
-        scope = {"type": "http", "method": method, "path": "/v1/coach", "headers": list(headers)}
-        asyncio.run(CoachBodyLimitMiddleware(downstream, max_bytes=limit)(scope, receive, send))
+        scope = {"type": "http", "method": method, "path": path, "headers": list(headers)}
+        asyncio.run(CoachBodyLimitMiddleware(downstream, max_bytes=limit, **options)(scope, receive, send))
         return sent, seen
 
     def test_declared_oversize_rejected_before_read(self):
@@ -69,3 +70,13 @@ class RequestLimitTests(unittest.TestCase):
         sent, seen = self.run_request([message], method="GET")
         self.assertEqual(sent[0]["status"], 200)
         self.assertEqual(seen, [message])
+
+    def test_upload_guard_rejects_before_reading_body(self):
+        async def guard(_request):
+            raise HTTPException(429, "Upload limit", headers={"Retry-After": "60"})
+
+        # An empty receive iterator raises if any part of the body is read.
+        sent, seen = self.run_request([], path=VIDEO_PATH, video_guard=guard)
+        self.assertEqual(sent[0]["status"], 429)
+        self.assertEqual(seen, [])
+        self.assertIn((b"retry-after", b"60"), sent[0]["headers"])

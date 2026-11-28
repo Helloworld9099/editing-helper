@@ -210,6 +210,8 @@ with sync_playwright() as pw:
         p.wait_for_function("() => document.querySelector('#preview').readyState >= 1")
         check("video: shows a playable preview and enables Send with an empty question",
               p.is_visible("#preview") and p.input_value("#input") == "" and not p.is_disabled("#send"))
+        check("video: disclosure is visible before upload",
+              p.is_visible("#clip-privacy") and "Google Gemini" in p.inner_text("#clip-privacy"))
         check("video: controls fit the minimum window",
               p.locator("#send").bounding_box()["y"] < 275 and not errs, errs)
         p.get_by_role("button", name="Remove video").click()

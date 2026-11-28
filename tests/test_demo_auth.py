@@ -25,10 +25,16 @@ class FakeRedis:
             raise ConnectionError("private Redis error")
         keys = args[:count]
         limits = list(map(int, args[count:2 * count]))
-        if any(self.counts.get(k, 0) >= cap for k, cap in zip(keys, limits)):
+        weights = list(map(int, args[3 * count:4 * count]))
+        if len(weights) != count or len(args) != 4 * count + 1:
+            raise AssertionError("Invalid quota script arguments")
+        if any(self.counts.get(k, 0) + weight > cap
+               for k, cap, weight in zip(keys, limits, weights)):
             return 0
-        for key in keys:
-            self.counts[key] = self.counts.get(key, 0) + 1
+        if int(args[-1]):
+            return 1
+        for key, weight in zip(keys, weights):
+            self.counts[key] = self.counts.get(key, 0) + weight
         return 1
 
 
@@ -156,6 +162,18 @@ class DemoBackendTests(unittest.TestCase):
 
         asyncio.run(scenario())
 
+    def test_emergency_switch_blocks_both_routes_before_quota_or_model(self):
+        store = FakeRedis()
+
+        def no_call(_request):
+            self.fail("Disabled demo must not reach the provider")
+
+        with self.client(store, no_call, {"COACH_DEMO_ENABLED": "0"}) as client:
+            self.assertEqual(client.get("/health").status_code, 200)
+            self.assertEqual(client.post("/v1/coach", json={"question": "Hello"}).status_code, 503)
+            self.assertEqual(client.post("/v1/coach/video", content=b"anything").status_code, 503)
+        self.assertEqual(store.calls, 0)
+
     def test_demo_mode_requires_explicit_redis_budget_and_no_shared_secret(self):
         with patch.dict(os.environ, self.settings, clear=True):
             with self.assertRaisesRegex(ValueError, "COACH_REDIS_URL"):
@@ -174,6 +192,39 @@ class DemoBackendTests(unittest.TestCase):
         with patch.dict(os.environ, {**self.settings, "COACH_PROVIDER": "ollama"}, clear=True):
             with self.assertRaisesRegex(ValueError, "hosted model provider"):
                 create_app(quota_store=FakeRedis())
+
+
+@unittest.skipUnless(os.environ.get("TEST_REDIS_URL"), "isolated Redis service not configured")
+class RealRedisQuotaTests(unittest.TestCase):
+    def test_atomic_weighted_reservations_and_read_only_preflight(self):
+        from uuid import uuid4
+        from redis.asyncio import from_url
+        from quota_limits import QUOTA_SCRIPT
+
+        async def scenario():
+            store = from_url(os.environ["TEST_REDIS_URL"], decode_responses=True)
+            prefix = "{coach-quota-test-" + uuid4().hex + "}"
+            keys = [prefix + ":calls", prefix + ":videos"]
+            try:
+                async def reserve(check=0):
+                    return await store.eval(QUOTA_SCRIPT, 2, *keys, 3, 1, 60, 60, 2, 1, check)
+
+                self.assertEqual(await reserve(1), 1)
+                self.assertEqual(await store.mget(keys), [None, None])
+                self.assertEqual(await reserve(), 1)
+                self.assertEqual(await store.mget(keys), ["2", "1"])
+                self.assertGreater(await store.ttl(keys[0]), 0)
+                self.assertEqual(await reserve(), 0)
+                self.assertEqual(await store.mget(keys), ["2", "1"])
+                await store.delete(*keys)
+                results = await asyncio.gather(*[reserve() for _ in range(10)])
+                self.assertEqual(sum(results), 1)
+                self.assertEqual(await store.mget(keys), ["2", "1"])
+            finally:
+                await store.delete(*keys)
+                await store.aclose()
+
+        asyncio.run(scenario())
 
 
 if __name__ == "__main__":
